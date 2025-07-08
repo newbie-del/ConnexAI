@@ -1,0 +1,14 @@
+01 Setup
+Setup Next.js
+Verify versions
+- Verify config files
+- Try out changing the files
+Confirm environment
+· Node.js >= 18.18
+- npm
+- Install Shaden/UI
+- Learn how to add components
+- Push our project to GitHub
+
+
+npx shadcn@2.5.0 add -all :- it will add components\ui in src/app folder - its the power of shadcn 
