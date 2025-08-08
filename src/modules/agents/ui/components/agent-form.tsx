@@ -35,27 +35,28 @@ export const AgentForm = ({
     const trpc = useTRPC();
     const queryClient = useQueryClient();
 
-    const createAgent = useMutation(
-        trpc.agents.create.mutationOptions({ // ✅ FIXED: typo 'mutattionOptions' → 'mutationOptions'
-            onSuccess: async () => {
+    const updateAgent = useMutation(
+    trpc.agents.update.mutationOptions({ 
+        onSuccess: async (_, variables) => {
+            await queryClient.invalidateQueries(
+                trpc.agents.getMany.queryOptions({})
+            );
+
+            if (variables.id) {
                 await queryClient.invalidateQueries(
-                    trpc.agents.getMany.queryOptions({}),
+                    trpc.agents.getOne.queryOptions({ id: variables.id })
                 );
+            }
 
-                if (initialValues?.id) {
-                    await queryClient.invalidateQueries(
-                        trpc.agents.getOne.queryOptions({id: initialValues.id}),
-                    );
-                }
-                onSuccess?.();
-            },
-            onError: (error) => {
-                toast.error(error.message);
-
+            onSuccess?.();
+        },
+        onError: (error) => {
+            toast.error(error.message);
             // TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
-            },
-        }),
-    ); 
+        },
+    }),
+);
+
 
 const updateAgent = useMutation(
     trpc.agents.update.mutationOptions({ 
