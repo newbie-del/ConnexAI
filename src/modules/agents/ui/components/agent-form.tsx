@@ -58,22 +58,27 @@ export const AgentForm = ({
     ); 
 
     const updateAgent = useMutation(
-        trpc.agents.update.mutationOptions({ 
-            onSuccess: async () => {
+    trpc.agents.update.mutationOptions({ 
+        onSuccess: async (_, variables) => {
+            await queryClient.invalidateQueries(
+                trpc.agents.getMany.queryOptions({})
+            );
+
+            if (variables.id) {
                 await queryClient.invalidateQueries(
-                    trpc.agents.getMany.queryOptions({}),
+                    trpc.agents.getOne.queryOptions({ id: variables.id })
                 );
+            }
 
-                
-                onSuccess?.();
-            },
-            onError: (error) => {
-                toast.error(error.message);
-
+            onSuccess?.();
+        },
+        onError: (error) => {
+            toast.error(error.message);
             // TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
-            },
-        }),
-    ); 
+        },
+    }),
+);
+
 
     const form = useForm<z.infer<typeof agentsInsertSchema>>({
         resolver: zodResolver(agentsInsertSchema),
