@@ -1,9 +1,12 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
 import { LoadingState } from "@/components/loading-state";
 import { useTRPC } from "@/trpc/client";
 import {  useSuspenseQuery } from "@tanstack/react-query";
+import { columns } from "../components/columns";
+import { EmptyState } from "@/components/empty-state";
 
 export const MeetingView = () => {
     const trpc = useTRPC();
@@ -11,7 +14,14 @@ export const MeetingView = () => {
     
     return (
         <div className="overflow-x-scroll">
-          {/*JSON.stringify(data) */}
+          <DataTable data={data.items} columns={columns}/>
+          {data.items.length === 0 && (
+                <EmptyState
+                    title="Create your first meeting"
+                    description="Schedule a meeting to connect with others. Each meeting lets you
+                                 collaborate, share ideas, and interact with participants in real time."
+                />
+                      )}
         </div>
     );
 }; 
