@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { agentsInsertSchema } from "../../schemas";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { zodResolver } from '@hookform/resolvers/zod'; // ✅ MISSING IMPORT
+import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useTRPC } from "@/trpc/client";
 
@@ -35,46 +35,35 @@ export const AgentForm = ({
     const trpc = useTRPC();
     const queryClient = useQueryClient();
 
-    const updateAgent = useMutation(
-    trpc.agents.update.mutationOptions({ 
-        onSuccess: async (_, variables) => {
-            await queryClient.invalidateQueries(
-                trpc.agents.getMany.queryOptions({})
-            );
+    const createAgent = useMutation(
+        trpc.agents.create.mutationOptions({
+            onSuccess: async (data) => {
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
 
-            if (variables.id) {
-                await queryClient.invalidateQueries(
-                    trpc.agents.getOne.queryOptions({ id: variables.id })
-                );
-            }
-
-            onSuccess?.();
-        },
-        onError: (error) => {
-            toast.error(error.message);
-            // TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
-        },
-    }),
-);
-
+                onSuccess?.();
+            },
+            onError: (error) => {
+                toast.error(error.message);
+            },
+        })
+    );
 
     const updateAgent = useMutation(
-        trpc.agents.update.mutationOptions({ 
-            onSuccess: async () => {
-                await queryClient.invalidateQueries(
-                    trpc.agents.getOne.queryOptions({ id: variables.id })
-                );
-            }
-
-            onSuccess?.();
-        },
-        onError: (error) => {
-            toast.error(error.message);
-            // TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
-        },
-    }),
-);
-
+        trpc.agents.update.mutationOptions({
+            onSuccess: async (_, variables) => {
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
+                if (variables.id) {
+                    await queryClient.invalidateQueries(
+                        trpc.agents.getOne.queryOptions({ id: variables.id })
+                    );
+                }
+                onSuccess?.();
+            },
+            onError: (error) => {
+                toast.error(error.message);
+            },
+        })
+    );
 
     const form = useForm<z.infer<typeof agentsInsertSchema>>({
         resolver: zodResolver(agentsInsertSchema),
@@ -89,7 +78,7 @@ export const AgentForm = ({
 
     const onSubmit = (values: z.infer<typeof agentsInsertSchema>) => {
         if (isEdit) {
-            updateAgent.mutate({...values, id: initialValues.id});
+            updateAgent.mutate({ ...values, id: initialValues!.id });
         } else {
             createAgent.mutate(values);
         }
@@ -126,9 +115,9 @@ export const AgentForm = ({
                             <FormLabel>Instructions</FormLabel>
                             <FormControl>
                                 <Textarea
-                                 {...field}
-                                 placeholder="you are a helpful math assistant that can answer questions and help with assignments."
-                                  />
+                                    {...field}
+                                    placeholder="you are a helpful math assistant that can answer questions and help with assignments."
+                                />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
