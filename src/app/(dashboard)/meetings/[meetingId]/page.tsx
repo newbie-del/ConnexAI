@@ -1,7 +1,7 @@
 const Page = () => {
     return (
         <div>
-            Meeting ID page
+            Meeting ID PAGE
         </div>
     );
 };
