@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { CallView } from "@/modules/call/ui/views/call-view";
 import { getQueryClient, trpc } from "@/trpc/server";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
-import { redirect } from "next/dist/server/api-utils";
+import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 interface Props{
