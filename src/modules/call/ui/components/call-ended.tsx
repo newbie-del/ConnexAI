@@ -1,10 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { LogInIcon } from "lucide-react";
 import Link from "next/link";
 
-
 export const CallEnded = () => {
-
   return (
     <div className="flex flex-col items-center justify-center h-full bg-radial from-sidebar-accent to-sidebar">
       <div className="py-4 px-8 flex flex-1 items-center justify-center">
