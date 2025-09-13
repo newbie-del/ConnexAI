@@ -54,7 +54,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   /* Primary color (eg. button) */
-  --primary: oklch(0.65 0.14 235);  
+  --primary: oklch(0.65 0.14 235);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -131,6 +131,8 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Custom cursor for buttons */
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -138,6 +140,15 @@
 }
 
 /* ---------------- Custom Animations ---------------- */
+
+/* Blob animation */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
 @keyframes gradient-shift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -145,31 +156,30 @@
 }
 
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.7); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+@keyframes text-glow {
   0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.7);
+    text-shadow: 0 0 5px rgba(var(--primary-rgb), 0.5), 0 0 10px rgba(var(--primary-rgb), 0.3);
   }
   50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0);
+    text-shadow: 0 0 10px rgba(var(--primary-rgb), 0.8), 0 0 20px rgba(var(--primary-rgb), 0.5);
   }
 }
 
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 @keyframes float-1 {
   0%, 100% { transform: translateY(0) translateX(0); }
@@ -181,32 +191,34 @@
   50% { transform: translateY(15px) translateX(-8px); }
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+@keyframes button-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
 }
 
 /* ---------------- Animation Utilities ---------------- */
-.animate-gradient-shift {
-  background-size: 200% 200%;
-  animation: gradient-shift 15s ease infinite;
-}
+.animate-blob { animation: blob 10s infinite ease-in-out; }
+.animate-blob.animation-delay-2000 { animation-delay: 2s; }
+.animate-blob.animation-delay-4000 { animation-delay: 4s; }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.8s ease-out forwards;
-}
+.animate-gradient-shift { background-size: 200% 200%; animation: gradient-shift 15s ease infinite; }
 
+.animate-fade-in-up { animation: fade-in-up 0.8s ease-out forwards; }
 .animate-fade-in-up.delay-200 { animation-delay: 0.2s; }
 .animate-fade-in-up.delay-400 { animation-delay: 0.4s; }
 
-.group-hover\:animate-pulse:hover {
-  animation: pulse 1s infinite;
-}
+.animate-pulse-slow { animation: pulse-slow 3s infinite ease-in-out; }
+.group-hover\:animate-pulse:hover { animation: pulse 1s infinite; }
 
-.group-hover\:animate-spin-slow:hover {
-  animation: spin-slow 5s linear infinite;
-}
+.animate-text-glow { animation: text-glow 2s infinite alternate ease-in-out; }
+
+.group-hover\:animate-spin-slow:hover { animation: spin-slow 5s linear infinite; }
 
 .animate-float-1 { animation: float-1 10s ease-in-out infinite; }
 .animate-float-2 { animation: float-2 12s ease-in-out infinite; }
 .animate-blink { animation: blink 1s step-end infinite; }
+
+.animate-button-pop { animation: button-pop 0.5s ease-out; }
