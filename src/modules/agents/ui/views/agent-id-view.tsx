@@ -68,6 +68,50 @@ export const AgentIdView = ({ agentId }: Props) => {
           agentName={data.name}
           onEdit={() => setUpdateDialogOpen(true)}
           onRemove={handleRemoveAgent}
+    const trpc = useTRPC();
+    const router = useRouter();
+    const queryClient = useQueryClient();
+
+    const [UpdateAgentDialogOpen, setUpdateAgentDialogOpen] = useState(false);
+
+    const { data } = useSuspenseQuery(
+        trpc.agents.getOne.queryOptions({ id: agentId })
+    );
+
+    const removeAgent = useMutation(
+        trpc.agents.remove.mutationOptions({
+            onSuccess: async () => {
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
+                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions(),
+            );
+                router.push("/agents");
+            },
+            onError: (error) => {
+                toast.error(error.message); 
+            }
+        }),
+    );
+
+    const [RemoveConfirmation, confirmRemove] = useConfirm(
+        "Are you sure",
+        `The following action will remove ${data.meetingCount} associated meetings`,
+    );
+
+    const handleRemoveAgent = async () => {
+        const ok = await confirmRemove();
+
+        if (!ok) return;
+
+        await removeAgent.mutateAsync({id: agentId});
+    };
+
+    return (
+        <>
+        <RemoveConfirmation />
+        <UpdateAgentDialog
+           open={UpdateAgentDialogOpen}
+           onOpenChange={setUpdateAgentDialogOpen}
+           initialValues={data}
         />
         <div className="bg-white rounded-xl border px-6 py-6 flex flex-col gap-y-4 shadow-sm">
           <div className="flex items-center gap-x-4">

@@ -41,6 +41,10 @@ export const AgentForm = ({
         trpc.agents.create.mutationOptions({
             onSuccess: async (data) => {
                 toast.success(`Agent "${data.name}" created successfully!`);
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}),
+            );
+                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions(),
+            );
 
                 await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
                 await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions());

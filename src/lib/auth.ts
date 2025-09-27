@@ -15,6 +15,7 @@ export const auth = betterAuth({
         checkout({
           authenticatedUsersOnly: true,
           successUrl: "https://isiah-unbrushable-sierra.ngrok-free.dev/upgrade",
+          successUrl: "/upgrade",
         }),
         portal(),
       ],
