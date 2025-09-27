@@ -19,4 +19,4 @@ export const AnimatedBackground = () => {
       </div>
     </div>
   );
-};
+

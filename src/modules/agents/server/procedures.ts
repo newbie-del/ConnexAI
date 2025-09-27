@@ -137,7 +137,7 @@ export const agentsRouter = createTRPCRouter({
             const [createdAgent] = await db
                 .insert(agents)
                 .values({
-                    ...input,
+                    ...input, 
                     userId: ctx.auth.user.id,
                 })
                 .returning();

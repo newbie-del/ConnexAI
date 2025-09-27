@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+
+import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
+
+import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
 
 import {
@@ -9,7 +13,7 @@ import {
   CallTranscriptionReadyEvent,
   CallSessionParticipantLeftEvent,
   CallRecordingReadyEvent,
-  CallSessionStartedEvent,             
+  CallSessionStartedEvent,
 } from "@stream-io/node-sdk";
 
 import { db } from "@/db";
@@ -20,6 +24,7 @@ import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!});
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
   return streamVideo.verifyWebhook(body, signature);
@@ -57,7 +62,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call.custom?.meetingId;
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       const [existingMeeting] = await db
@@ -69,11 +77,14 @@ export async function POST(req: NextRequest) {
             not(eq(meetings.status, "completed")),
             not(eq(meetings.status, "active")),
             not(eq(meetings.status, "cancelled")),
-            not(eq(meetings.status, "processing")),
+            not(eq(meetings.status, "processing"))
           )
         );
       if (!existingMeeting) {
-        return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
       }
 
       await db
@@ -108,7 +119,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call_cid.split(":")[1];
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       const call = streamVideo.video.call("default", meetingId);
@@ -118,7 +132,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call.custom?.meetingId;
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       await db
@@ -141,7 +158,10 @@ export async function POST(req: NextRequest) {
         .returning();
 
       if (!updatedMeeting) {
-        return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
       }
 
       await inngest.send({
@@ -151,7 +171,6 @@ export async function POST(req: NextRequest) {
           transcriptUrl: updatedMeeting.transcriptUrl,
         },
       });
-
     } else if (eventType === "call.recording_ready") {
       const event = payload as CallRecordingReadyEvent;
       const meetingId = event.call_cid.split(":")[1];
@@ -169,7 +188,7 @@ export async function POST(req: NextRequest) {
       const channelId = event.channel_id;
       const text = event.message?.text;
 
-      // ✅ Fix: error tabhi throw hoga jab inme se koi bhi field missing ho
+
       if (!userId || !channelId || !text) {
         return NextResponse.json(
           { error: "Missing required fields" },
@@ -187,12 +206,25 @@ export async function POST(req: NextRequest) {
       }
 
        const [existingAgent] = await db
+        .where(
+          and(eq(meetings.id, channelId), eq(meetings.status, "completed"))
+        );
+
+      if (!existingMeeting) {
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
+      }
+
+      const [existingAgent] = await db
         .select()
         .from(agents)
         .where(eq(agents.id, existingMeeting.agentId));
 
       if (!existingAgent) {
         return NextResponse.json({error: "Agent not found"}, {status: 404});
+        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }
 
       if (userId !== existingAgent.id) {
@@ -234,6 +266,24 @@ export async function POST(req: NextRequest) {
             {role: "user", content: text},
           ],
           model : "gpt-4o-mini",
+        const channel = streamChat.channel("messaging", channelId);
+        await channel.watch();
+
+        const previousMessages = channel.state.messages
+          .slice(-5)
+          .filter((msg) => msg.text && msg.text.trim() !== "")
+          .map<ChatCompletionMessageParam>((message) => ({
+            role: message.user?.id === existingAgent.id ? "assistant" : "user",
+            content: message.text || "",
+          }));
+
+        const GPTResponse = await openaiClient.chat.completions.create({
+          messages: [
+            { role: "system", content: instructions },
+            ...previousMessages,
+            { role: "user", content: text },
+          ],
+          model: "gpt-4o-mini",
         });
 
         const GPTResponseText = GPTResponse.choices[0].message.content;
@@ -242,6 +292,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(
             {error: "No response from GPT"},
             {status: 400}
+            { error: "No response from GPT" },
+            { status: 400 }
           );
         }
 
@@ -270,8 +322,11 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("Error processing webhook event:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
- 
+
   return NextResponse.json({ status: "ok" });
 }
