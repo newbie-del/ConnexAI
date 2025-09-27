@@ -1,7 +1,12 @@
+import OpenAI from "openai";
 import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+
+import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
+
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
+
 import {
   MessageNewEvent,
   CallEndedEvent,
@@ -18,6 +23,7 @@ import { inngest } from "@/inngest/client";
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!});
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
@@ -182,6 +188,7 @@ export async function POST(req: NextRequest) {
       const channelId = event.channel_id;
       const text = event.message?.text;
 
+
       if (!userId || !channelId || !text) {
         return NextResponse.json(
           { error: "Missing required fields" },
@@ -192,6 +199,13 @@ export async function POST(req: NextRequest) {
       const [existingMeeting] = await db
         .select()
         .from(meetings)
+        .where(and(eq(meetings.id, channelId), eq(meetings.status, "completed")));
+
+      if (!existingMeeting) {
+        return NextResponse.json ({error: "Meeting not found"}, {status:404});
+      }
+
+       const [existingAgent] = await db
         .where(
           and(eq(meetings.id, channelId), eq(meetings.status, "completed"))
         );
@@ -209,6 +223,7 @@ export async function POST(req: NextRequest) {
         .where(eq(agents.id, existingMeeting.agentId));
 
       if (!existingAgent) {
+        return NextResponse.json({error: "Agent not found"}, {status: 404});
         return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }
 
@@ -233,6 +248,24 @@ export async function POST(req: NextRequest) {
       Be concise, helpful, and focus on providing accurate information from the meeting and the ongoing conversation.
       `;
 
+      const channel = streamChat.channel("messaging", channelId);
+      await channel.watch();
+
+      const previousMessages = channel.state.messages
+        .slice(-5)
+        .filter((msg) => msg.text && msg.text.trim() !== "")
+        .map<ChatCompletionMessageParam> ((message) => ({
+          role: message.user?.id === existingAgent.id ? "assistant" : "user",
+          content: message.text || "",
+        }));
+
+        const GPTResponse = await openaiClient.chat.completions.create({
+          messages: [
+            { role: "system", content: instructions},
+            ...previousMessages,
+            {role: "user", content: text},
+          ],
+          model : "gpt-4o-mini",
         const channel = streamChat.channel("messaging", channelId);
         await channel.watch();
 
@@ -257,6 +290,8 @@ export async function POST(req: NextRequest) {
 
         if (!GPTResponseText) {
           return NextResponse.json(
+            {error: "No response from GPT"},
+            {status: 400}
             { error: "No response from GPT" },
             { status: 400 }
           );
@@ -283,6 +318,8 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+
   } catch (error) {
     console.error("Error processing webhook event:", error);
     return NextResponse.json(

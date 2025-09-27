@@ -1,4 +1,4 @@
-// components/ui/typewriter-effect-smooth.tsx (Conceptual)
+
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -53,6 +53,14 @@ export const TypewriterEffectSmooth = ({
 
   return (
     <div className={className}>
+      <span className={words[wordIndex]?.className}>{displayedText}</span>
+      <span
+        className={`inline-block bg-primary w-1 h-full animate-blink ${cursorClassName}`}
+      ></span>
+    </div>
+  );
+};
+
       {words.map((word, idx) => (
         <span key={idx} className={word.className}>
           {word.text}{" "}

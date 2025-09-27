@@ -39,13 +39,15 @@ export const AgentForm = ({
 
     const createAgent = useMutation(
         trpc.agents.create.mutationOptions({
-
             onSuccess: async (data) => {
+                toast.success(`Agent "${data.name}" created successfully!`);
                 await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}),
             );
                 await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions(),
             );
 
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
+                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions());
 
                 onSuccess?.();
             },
@@ -61,7 +63,9 @@ export const AgentForm = ({
 
     const updateAgent = useMutation(
         trpc.agents.update.mutationOptions({
-            onSuccess: async (_, variables) => {
+            onSuccess: async (data, variables) => {
+                toast.success(`Agent "${data.name}" updated successfully!`);
+
                 await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
                 if (variables.id) {
                     await queryClient.invalidateQueries(
