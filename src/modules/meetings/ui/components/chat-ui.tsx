@@ -6,7 +6,7 @@ import {
     useCreateChatClient,
     Chat,
     Channel,
-    MessageComposer,
+    MessageInput,
     MessageList,
     Thread,
     Window,
@@ -15,7 +15,7 @@ import {
 import { useTRPC } from "@/trpc/client";
 import { LoadingState } from "@/components/loading-state";
 
-import "stream-chat-react/dist/css/index.css";
+import "stream-chat-react/dist/css/v2/index.css";
 
 interface ChatUIProps {
     meetingId: string;
@@ -75,7 +75,7 @@ export const ChatUI = ({
                         <div className="flex-1 overflow-y-auto max-h-[calc(100vh-23rem)] border-b">
                             <MessageList />
                         </div>
-                        <MessageComposer />
+                        <MessageInput />
                     </Window>
                     <Thread />
                 </Channel>
