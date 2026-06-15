@@ -1,7 +1,11 @@
+import { db } from '@/db';
+import { agents, meetings } from '@/db/schema';
 import { auth } from '@/lib/auth';
+import { polarClient } from '@/lib/polar';
+import { MAX_FREE_AGENTS, MAX_FREE_MEETINGS } from '@/modules/premium/constants';
 import { initTRPC, TRPCError } from '@trpc/server';
+import { count, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
-import { cache } from 'react';
 
 export const createTRPCContext = async () => {
   /**
@@ -10,13 +14,9 @@ export const createTRPCContext = async () => {
   return { userId: 'user_123' };
 };
 
-// Avoid exporting the entire t-object
-// since it's not very descriptive.
+// Initialize tRPC
 const t = initTRPC.create({
-  /**
-   * @see https://trpc.io/docs/server/data-transformers
-   */
-  // transformer: superjson,
+  // transformer: superjson, // optional
 });
 
 // Base router and procedure helpers
@@ -26,7 +26,7 @@ export const baseProcedure = t.procedure;
 
 export const protectedProcedure = baseProcedure.use(async ({ ctx, next }) => {
   const session = await auth.api.getSession({
-    headers:  await headers(), 
+    headers: await headers(), 
   });
 
   if (!session) {
@@ -39,7 +39,47 @@ export const protectedProcedure = baseProcedure.use(async ({ ctx, next }) => {
   return next({
     ctx: {
       ...ctx,
-      auth: session, // ✅ Fixed typo: was `auth session`, now `auth: session`
+      auth: session,
     },
   });
 });
+
+export const premiumProcedure = (entity: "meetings" | "agents") =>
+  protectedProcedure.use(async ({ ctx, next }) => {
+    // Fetch premium customer status
+    const customer = await polarClient.customers.getStateExternal({
+      externalId: ctx.auth.user.id,
+    });
+
+    // Count user's meetings and agents
+    const [userMeetings] = await db
+      .select({ count: count(meetings.id) })
+      .from(meetings)
+      .where(eq(meetings.userId, ctx.auth.user.id));
+
+    const [userAgents] = await db
+      .select({ count: count(agents.id) })
+      .from(agents)
+      .where(eq(agents.userId, ctx.auth.user.id));
+
+    const isPremium = customer.activeSubscriptions.length > 0;
+    const isFreeAgentLimitReached = userAgents.count >= MAX_FREE_AGENTS;
+    const isFreeMeetingLimitReached = userMeetings.count >= MAX_FREE_MEETINGS;
+
+    
+    if (entity === "meetings" && isFreeMeetingLimitReached && !isPremium) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You have reached the maximum number of free meetings",
+      });
+    }
+
+    if (entity === "agents" && isFreeAgentLimitReached && !isPremium) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You have reached the maximum number of free agents",
+      });
+    }
+
+    return next({ ctx: { ...ctx, customer } });
+  });
