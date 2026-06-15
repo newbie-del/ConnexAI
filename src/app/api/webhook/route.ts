@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call.custom?.meetingId;
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       const [existingMeeting] = await db
@@ -75,7 +78,10 @@ export async function POST(req: NextRequest) {
         );
 
       if (!existingMeeting) {
-        return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
       }
 
       await db
@@ -111,7 +117,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call_cid.split(":")[1];
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       const call = streamVideo.video.call("default", meetingId);
@@ -122,7 +131,10 @@ export async function POST(req: NextRequest) {
       const meetingId = event.call.custom?.meetingId;
 
       if (!meetingId) {
-        return NextResponse.json({ error: "Missing meetingId" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Missing meetingId" },
+          { status: 400 }
+        );
       }
 
       await db
@@ -146,7 +158,10 @@ export async function POST(req: NextRequest) {
         .returning();
 
       if (!updatedMeeting) {
-        return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
       }
 
       await inngest.send({
@@ -156,7 +171,6 @@ export async function POST(req: NextRequest) {
           transcriptUrl: updatedMeeting.transcriptUrl,
         },
       });
-
     } else if (eventType === "call.recording_ready") {
       const event = payload as CallRecordingReadyEvent;
       const meetingId = event.call_cid.split(":")[1];
@@ -264,7 +278,10 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("Error processing webhook event:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ status: "ok" });
