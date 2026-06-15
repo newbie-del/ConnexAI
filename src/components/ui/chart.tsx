@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
-import { LegendProps } from "recharts"
 import { cn } from "@/lib/utils"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -308,13 +307,13 @@ function ChartLegendContent({
 // Helper to extract item config from a payload
 function getPayloadConfigFromPayload(
   config: ChartConfig,
-  payload: any,
+  payload: unknown,
   key: string
 ) {
-  if (typeof payload !== "object" || payload === null) return undefined
+  if (!isRecord(payload)) return undefined
 
   const payloadPayload =
-    "payload" in payload && typeof payload.payload === "object"
+    "payload" in payload && isRecord(payload.payload)
       ? payload.payload
       : undefined
 
@@ -333,6 +332,10 @@ function getPayloadConfigFromPayload(
   return configLabelKey in config
     ? config[configLabelKey]
     : config[key as keyof typeof config]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
 }
 
 export {

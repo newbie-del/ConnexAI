@@ -32,8 +32,11 @@ const DisabledVideoPreview = () => {
       generateAvatarUri({ seed: data?.user.name ?? "", variant: "initials" }),
     publishedTracks: [],
     trackLookupPrefix: "",
-    connectionId: "preview",
-    role: "guest",
+    connectionQuality: 0,
+    isSpeaking: false,
+    isDominantSpeaker: false,
+    audioLevel: 0,
+    roles: ["guest"],
   };
 
   return (
