@@ -6,6 +6,8 @@ import * as schema from "@/db/schema";
 
 import { polarClient } from "./polar";
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
 export const auth = betterAuth({
   plugins: [
     polar({
@@ -14,8 +16,7 @@ export const auth = betterAuth({
       use: [
         checkout({
           authenticatedUsersOnly: true,
-          successUrl: "https://isiah-unbrushable-sierra.ngrok-free.dev/upgrade",
-          successUrl: "/upgrade",
+          successUrl: `${appUrl}/upgrade`,
         }),
         portal(),
       ],

@@ -100,28 +100,19 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-// Helper types
-// type ValueType = number | string | Array<number | string>
-// type NameType = string | number
+type ChartTooltipContentProps =
+  RechartsPrimitive.TooltipContentProps<
+    number | string | Array<number | string>,
+    number | string
+  > &
+    React.ComponentProps<"div"> & {
+      hideLabel?: boolean
+      hideIndicator?: boolean
+      indicator?: "line" | "dot" | "dashed"
+      nameKey?: string
+      labelKey?: string
+    }
 
-// Fixed Tooltip props interface
-interface ChartTooltipContentProps extends React.HTMLAttributes<HTMLDivElement> {
-  active?: boolean;
-  payload?: Array<{ value: number | string; name?: string; dataKey?: string; payload?: Record<string, any>; color?: string }>;
-  label?: string | number;
-  hideLabel?: boolean;
-  hideIndicator?: boolean;
-  indicator?: "line" | "dot" | "dashed";
-  nameKey?: string;
-  labelKey?: string;
-  color?: string;
-  labelClassName?: string;
-  formatter?: (value: number | string, name: string | undefined, item: any, index: number, payload?: Record<string, any>) => React.ReactNode;
-  labelFormatter?: (value: any, payload?: Array<any>) => React.ReactNode;
-}
-
-
-// Tooltip component
 function ChartTooltipContent({
   active,
   payload,
@@ -255,12 +246,14 @@ function ChartTooltipContent({
 
 const ChartLegend = RechartsPrimitive.Legend
 
-interface ChartLegendContentProps extends React.HTMLAttributes<HTMLDivElement> {
-  hideIcon?: boolean
-  payload?: Array<any>
-  verticalAlign?: LegendProps["verticalAlign"]
-  nameKey?: string
-}
+type ChartLegendContentProps = React.ComponentProps<"div"> &
+  Pick<
+    RechartsPrimitive.DefaultLegendContentProps,
+    "payload" | "verticalAlign"
+  > & {
+    hideIcon?: boolean
+    nameKey?: string
+  }
 
 function ChartLegendContent({
   className,

@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ConnexAI
 
-## Getting Started
+ConnexAI is a Next.js app for AI-assisted meetings. It uses Better Auth, Neon/Postgres with Drizzle, Stream Chat/Video, OpenAI, Inngest, and Polar.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20.18 or newer
+- npm
+- A Postgres database URL
+- Provider credentials for Better Auth social login, Stream, OpenAI, Polar, and Inngest
+
+## Local Setup
 
 ```bash
+npm install
+cp .env.example .env
+npm run db:push
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set the values in `.env` before starting the app. The local app runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Use `.env.example` as the source of required deployment variables. In production, set:
 
-## Learn More
+- `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` to the deployed app URL
+- `DATABASE_URL` to your production Postgres connection string
+- `BETTER_AUTH_SECRET` to a strong random secret
+- OAuth credentials for GitHub and Google
+- Stream Chat and Stream Video keys/secrets
+- `OPENAI_API_KEY`
+- `POLAR_ACCESS_TOKEN` and `POLAR_SERVER` (`sandbox` or `production`)
+- `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`
 
-To learn more about Next.js, take a look at the following resources:
+## Production Build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm run build
+npm run start
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`next.config.ts` enables standalone output, so platforms that run the Next server directly can use the generated `.next/standalone` build. Vercel can deploy this project with the default Next.js settings.
 
-## Deploy on Vercel
+## Deployment Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Before deploying, run database migrations with:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run db:push
+```
+
+Configure external webhook URLs after the app has a public URL:
+
+- Stream webhook: `https://your-domain.com/api/webhook`
+- Inngest endpoint: `https://your-domain.com/api/inngest`
+
+For local webhook testing, update `dev:webhook` in `package.json` with your own ngrok URL.

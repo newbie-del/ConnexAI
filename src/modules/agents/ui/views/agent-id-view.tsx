@@ -1,5 +1,7 @@
 "use client";
 
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/trpc/client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient, useMutation, useSuspenseQuery } from "@tanstack/react-query";
@@ -80,10 +82,10 @@ export const AgentIdView = ({ agentId }: Props) => {
 
     const removeAgent = useMutation(
         trpc.agents.remove.mutationOptions({
-            onSuccess: async () => {
+            onSuccess: async() => {
                 await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
-                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions(),
-            );
+                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions());
+
                 router.push("/agents");
             },
             onError: (error) => {
