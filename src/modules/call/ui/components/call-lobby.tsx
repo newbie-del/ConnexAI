@@ -37,6 +37,7 @@ const DisabledVideoPreview = () => {
     isDominantSpeaker: false,
     audioLevel: 0,
     roles: ["guest"],
+    source: 0,
   };
 
   return (
