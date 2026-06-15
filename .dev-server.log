@@ -1,0 +1,44 @@
+
+> connexai@0.1.0 dev
+> next dev -p 3001
+
+   ▲ Next.js 15.3.5
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.56.1:3001
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 2.4s
+ ○ Compiling / ...
+ ✓ Compiled / in 7.9s (5650 modules)
+ GET / 307 in 9303ms
+ ○ Compiling /sign-in ...
+ ✓ Compiled /sign-in in 4.2s (5818 modules)
+ GET /sign-in 200 in 5206ms
+ GET / 307 in 299ms
+ GET /sign-in 200 in 92ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 1665ms (3703 modules)
+ GET /favicon.ico 200 in 2055ms
+ ○ Compiling /api/auth/[...all] ...
+ ✓ Compiled /api/auth/[...all] in 1781ms (5823 modules)
+[2m2026-06-11T17:04:07.154Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/email 403 in 4347ms
+[2m2026-06-11T17:04:14.524Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/social 403 in 31ms
+[2m2026-06-11T17:04:18.867Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/social 403 in 33ms
+[2m2026-06-11T17:04:19.815Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/social 403 in 15ms
+[2m2026-06-11T17:04:20.921Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/social 403 in 41ms
+ GET /sign-in 200 in 841ms
+ GET /favicon.ico 200 in 38ms
+[2m2026-06-11T17:04:26.236Z[0m [34mINFO[0m [1m[Better Auth]:[0m If it's a valid URL, please add http://localhost:3001 to trustedOrigins in your auth config
+ Current list of trustedOrigins: https://juliann-untinned-refreshfully.ngrok-free.dev
+ POST /api/auth/sign-in/social 403 in 36ms

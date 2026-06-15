@@ -1,0 +1,12 @@
+[Error: EPERM: operation not permitted, open 'D:\connexai_main\.next\trace'] {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'open',
+  path: 'D:\\connexai_main\\.next\\trace'
+}
+[2m2026-06-11T17:04:07.150Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001
+[2m2026-06-11T17:04:14.522Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001
+[2m2026-06-11T17:04:18.863Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001
+[2m2026-06-11T17:04:19.813Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001
+[2m2026-06-11T17:04:20.921Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001
+[2m2026-06-11T17:04:26.232Z[0m [31mERROR[0m [1m[Better Auth]:[0m Invalid origin: http://localhost:3001

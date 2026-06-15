@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { useState } from "react";
 import { LoadingState } from "@/components/loading-state";
@@ -31,9 +31,10 @@ export const AgentIdView = ({ agentId }: Props) => {
 
     const removeAgent = useMutation(
         trpc.agents.remove.mutationOptions({
-            onSuccess: () => {
-                queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
-                //TODO: Invaliddate free tier usage
+            onSuccess: async() => {
+                await queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
+                await queryClient.invalidateQueries(trpc.premium.getFreeUsage.queryOptions());
+
                 router.push("/agents");
             },
             onError: (error) => {
