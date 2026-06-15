@@ -18,7 +18,7 @@
     "@dicebear/collection": "^9.2.3",
     "@dicebear/core": "^9.2.3",
     "@hookform/resolvers": "^5.1.1",
-    "@inngest/agent-kit": "^0.9.0",
+    "@inngest/agent-kit": "^0.13.2",
     "@neondatabase/serverless": "^1.0.0",
     "@opentelemetry/winston-transport": "^0.16.0",
     "@polar-sh/better-auth": "^1.1.4",
@@ -69,7 +69,7 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.22",
     "humanize-duration": "^3.33.0",
-    "inngest": "^3.40.2",
+    "inngest": "^3.54.0",
     "input-otp": "^1.4.2",
     "jsonl-parse-stringify": "^1.0.3",
     "lucide-react": "^0.525.0",
@@ -95,7 +95,7 @@
     "stream-chat-react": "^13.7.0",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
-    "zod": "^3.25.7"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
