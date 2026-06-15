@@ -7,11 +7,12 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { count, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 
+// ------------------------
+// Context
+// ------------------------
 export const createTRPCContext = async () => {
-  /**
-   * @see: https://trpc.io/docs/server/context
-   */
-  return { userId: 'user_123' };
+  // Example static context for testing
+  return { userId: "user_123" };
 };
 
 // Initialize tRPC
@@ -19,11 +20,14 @@ const t = initTRPC.create({
   // transformer: superjson, // optional
 });
 
-// Base router and procedure helpers
+// Base helpers
 export const createTRPCRouter = t.router;
 export const createCallerFactory = t.createCallerFactory;
 export const baseProcedure = t.procedure;
 
+// ------------------------
+// Protected procedure
+// ------------------------
 export const protectedProcedure = baseProcedure.use(async ({ ctx, next }) => {
   const session = await auth.api.getSession({
     headers: await headers(), 

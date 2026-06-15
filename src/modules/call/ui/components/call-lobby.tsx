@@ -1,3 +1,5 @@
+"use client";
+
 import {
   DefaultVideoPlaceholder,
   StreamVideoParticipant,
@@ -12,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { LogInIcon } from "lucide-react";
 import Link from "next/link";
 
-import "@stream-io/video-react-sdk/dist/css/styles.css"
+import "@stream-io/video-react-sdk/dist/css/styles.css";
 
 interface Props {
   onJoin: () => void;
@@ -21,23 +23,22 @@ interface Props {
 const DisabledVideoPreview = () => {
   const { data } = authClient.useSession();
 
+  const participant: StreamVideoParticipant = {
+    userId: data?.user.id ?? "unknown",
+    sessionId: "preview",
+    name: data?.user.name ?? "Unknown",
+    image:
+      data?.user.image ??
+      generateAvatarUri({ seed: data?.user.name ?? "", variant: "initials" }),
+    publishedTracks: [],
+    trackLookupPrefix: "",
+    connectionId: "preview",
+    role: "guest",
+  };
+
   return (
     <div className="flex flex-col items-center justify-center gap-2">
-      <DefaultVideoPlaceholder
-        participant={
-          {
-            name: data?.user.name ?? "",
-            image:
-              data?.user.image ??
-              generateAvatarUri({
-                seed: data?.user.name ?? "",
-                variant: "initials",
-              }),
-          } as StreamVideoParticipant
-        }
-        // 👇 profile image ko thoda bada karne ke liye
-        className="w-32 h-32"
-      />
+      <DefaultVideoPlaceholder participant={participant} className="w-32 h-32" />
       <p className="text-xs text-muted-foreground text-center max-w-[220px]">
         Please grant your browser permission to access your camera and microphone.
       </p>
@@ -55,24 +56,20 @@ export const CallLobby = ({ onJoin }: Props) => {
             <p className="text-sm">Set up your call before joining</p>
           </div>
 
-          {/* 👇 Profile image shown when video is disabled */}
           <VideoPreview DisabledVideoPreview={DisabledVideoPreview} />
 
           <div className="flex gap-x-2">
             <ToggleAudioPreviewButton />
             <ToggleVideoPreviewButton />
           </div>
+
           <div className="flex gap-x-2 justify-between w-full">
             <Button asChild variant="ghost">
-                <Link href="/meetings">
-                   Cancel
-                </Link>
+              <Link href="/meetings">Cancel</Link>
             </Button>
-            <Button 
-              onClick={onJoin}
-            >
-                <LogInIcon />
-                Join Call
+            <Button onClick={onJoin}>
+              <LogInIcon />
+              Join Call
             </Button>
           </div>
         </div>

@@ -1,3 +1,4 @@
+/* ---------------- Tailwind Imports ---------------- */
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -43,6 +44,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ---------------- Light Mode Variables ---------------- */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -52,7 +54,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   /* Primary color (eg. button) */
-  --primary: oklch(0.65 0.14 235);  
+  --primary: oklch(0.65 0.14 235);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -69,20 +71,21 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  /*Sidebar background color*/
+  /* Sidebar */
   --sidebar: oklch(0.18 0.08 219);
-  /*Sidebar text color*/
   --sidebar-foreground: oklch(0.92 0.015 219);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  /* Sidebar active item background color*/
   --sidebar-accent: oklch(0.52 0.12 235);
-  /* SIdebar active item text color*/
   --sidebar-accent-foreground: oklch(0.98 0.01 235);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* For pulse animation */
+  --primary-rgb: 72, 102, 214; /* converted from oklch(0.65 0.14 235) */
 }
 
+/* ---------------- Dark Mode Variables ---------------- */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -115,8 +118,12 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* For pulse animation in dark */
+  --primary-rgb: 200, 200, 255;
 }
 
+/* ---------------- Base Layer ---------------- */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -124,11 +131,94 @@
   body {
     @apply bg-background text-foreground;
   }
-}
 
-@layer base {
+  /* Custom cursor for buttons */
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
-} 
+}
+
+/* ---------------- Custom Animations ---------------- */
+
+/* Blob animation */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.7); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(var(--primary-rgb), 0); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+@keyframes text-glow {
+  0%, 100% {
+    text-shadow: 0 0 5px rgba(var(--primary-rgb), 0.5), 0 0 10px rgba(var(--primary-rgb), 0.3);
+  }
+  50% {
+    text-shadow: 0 0 10px rgba(var(--primary-rgb), 0.8), 0 0 20px rgba(var(--primary-rgb), 0.5);
+  }
+}
+
+@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+@keyframes float-1 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(-10px) translateX(5px); }
+}
+
+@keyframes float-2 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(15px) translateX(-8px); }
+}
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+@keyframes button-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+/* ---------------- Animation Utilities ---------------- */
+.animate-blob { animation: blob 10s infinite ease-in-out; }
+.animate-blob.animation-delay-2000 { animation-delay: 2s; }
+.animate-blob.animation-delay-4000 { animation-delay: 4s; }
+
+.animate-gradient-shift { background-size: 200% 200%; animation: gradient-shift 15s ease infinite; }
+
+.animate-fade-in-up { animation: fade-in-up 0.8s ease-out forwards; }
+.animate-fade-in-up.delay-200 { animation-delay: 0.2s; }
+.animate-fade-in-up.delay-400 { animation-delay: 0.4s; }
+
+.animate-pulse-slow { animation: pulse-slow 3s infinite ease-in-out; }
+.group-hover\:animate-pulse:hover { animation: pulse 1s infinite; }
+
+.animate-text-glow { animation: text-glow 2s infinite alternate ease-in-out; }
+
+.group-hover\:animate-spin-slow:hover { animation: spin-slow 5s linear infinite; }
+
+.animate-float-1 { animation: float-1 10s ease-in-out infinite; }
+.animate-float-2 { animation: float-2 12s ease-in-out infinite; }
+.animate-blink { animation: blink 1s step-end infinite; }
+
+.animate-button-pop { animation: button-pop 0.5s ease-out; }
