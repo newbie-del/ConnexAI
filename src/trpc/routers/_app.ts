@@ -6,7 +6,6 @@ import { meetingsRouter } from "@/modules/meetings/server/procedures";
 import { premiumRouter } from "@/modules/premium/server/procedures";
 import { createTRPCRouter } from '../init';
 import { meetingsRouter } from '@/modules/meetings/server/procedures';
-import { meetings } from '@/db/schema';
 import { premiumRouter } from '@/modules/premium/server/procedures';
 
 // Main tRPC app router
@@ -18,6 +17,5 @@ export const appRouter = createTRPCRouter({
     meetings: meetingsRouter,
     premium: premiumRouter,
 });
-
-// Export type definition for API
+// export type definition of API
 export type AppRouter = typeof appRouter;
