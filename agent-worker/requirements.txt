@@ -1,0 +1,4 @@
+# LiveKit Agents + Google Gemini Live plugin (free-tier voice model).
+# Pinned to the 1.5.x line matching the current docs API (google.realtime.RealtimeModel).
+livekit-agents[google]~=1.5
+python-dotenv~=1.0

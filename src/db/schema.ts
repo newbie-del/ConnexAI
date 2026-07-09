@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, unique } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text('id').primaryKey(),
@@ -88,4 +88,27 @@ export const meetings = pgTable("meetings", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const meetingParticipantRole = pgEnum("meeting_participant_role", [
+  "host",
+  "participant",
+]);
+
+export const meetingParticipants = pgTable(
+  "meeting_participants",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    meetingId: text("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: meetingParticipantRole("role").notNull().default("participant"),
+    joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  },
+  (table) => [unique("meeting_participants_meeting_user_unique").on(table.meetingId, table.userId)],
+);
 

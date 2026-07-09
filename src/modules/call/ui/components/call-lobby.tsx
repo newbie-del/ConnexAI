@@ -1,82 +1,46 @@
 "use client";
 
-import {
-  DefaultVideoPlaceholder,
-  StreamVideoParticipant,
-  ToggleAudioPreviewButton,
-  ToggleVideoPreviewButton,
-  VideoPreview,
-} from "@stream-io/video-react-sdk";
+import "@livekit/components-styles";
 
-import { authClient } from "@/lib/auth-client";
-import { generateAvatarUri } from "@/lib/avatar";
-import { Button } from "@/components/ui/button";
-import { LogInIcon } from "lucide-react";
-import Link from "next/link";
-
-import "@stream-io/video-react-sdk/dist/css/styles.css";
+import { PreJoin, type LocalUserChoices } from "@livekit/components-react";
 
 interface Props {
-  onJoin: () => void;
+    /** Pre-filled display name (signed-in user or guest). */
+    userName: string;
+    /** Fired when the user picks devices and clicks "Join". */
+    onJoin: (choices: LocalUserChoices) => void;
 }
 
-const DisabledVideoPreview = () => {
-  const { data } = authClient.useSession();
+/**
+ * Pre-call screen with a live camera preview and mic/camera + device pickers —
+ * the LiveKit-native equivalent of the old Stream lobby. The chosen devices are
+ * handed to <LiveKitRoom> in call-connect.
+ */
+export const CallLobby = ({ userName, onJoin }: Props) => {
+    return (
+        <div
+            data-lk-theme="default"
+            className="flex h-full flex-col items-center justify-center bg-radial from-sidebar-accent to-sidebar"
+        >
+            <div className="w-full max-w-2xl rounded-lg bg-background/95 p-6 shadow-lg">
+                <div className="mb-4 text-center">
+                    <h6 className="text-lg font-medium">Ready to join?</h6>
+                    <p className="text-sm text-muted-foreground">
+                        Set up your camera and microphone before joining.
+                    </p>
+                </div>
 
-  const participant: StreamVideoParticipant = {
-    userId: data?.user.id ?? "unknown",
-    sessionId: "preview",
-    name: data?.user.name ?? "Unknown",
-    image:
-      data?.user.image ??
-      generateAvatarUri({ seed: data?.user.name ?? "", variant: "initials" }),
-    publishedTracks: [],
-    trackLookupPrefix: "",
-    connectionQuality: 0,
-    isSpeaking: false,
-    isDominantSpeaker: false,
-    audioLevel: 0,
-    roles: ["guest"],
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center gap-2">
-      <DefaultVideoPlaceholder participant={participant} className="w-32 h-32" />
-      <p className="text-xs text-muted-foreground text-center max-w-[220px]">
-        Please grant your browser permission to access your camera and microphone.
-      </p>
-    </div>
-  );
-};
-
-export const CallLobby = ({ onJoin }: Props) => {
-  return (
-    <div className="flex flex-col items-center justify-center h-full bg-radial from-sidebar-accent to-sidebar">
-      <div className="py-4 px-8 flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center justify-center gap-y-6 bg-background rounded-lg p-10 shadow-sm">
-          <div className="flex flex-col gap-y-2 text-center">
-            <h6 className="text-lg font-medium">Ready to join?</h6>
-            <p className="text-sm">Set up your call before joining</p>
-          </div>
-
-          <VideoPreview DisabledVideoPreview={DisabledVideoPreview} />
-
-          <div className="flex gap-x-2">
-            <ToggleAudioPreviewButton />
-            <ToggleVideoPreviewButton />
-          </div>
-
-          <div className="flex gap-x-2 justify-between w-full">
-            <Button asChild variant="ghost">
-              <Link href="/meetings">Cancel</Link>
-            </Button>
-            <Button onClick={onJoin}>
-              <LogInIcon />
-              Join Call
-            </Button>
-          </div>
+                <PreJoin
+                    defaults={{
+                        username: userName,
+                        videoEnabled: true,
+                        audioEnabled: true,
+                    }}
+                    onSubmit={onJoin}
+                    persistUserChoices
+                    joinLabel="Join Call"
+                />
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
