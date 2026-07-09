@@ -1,93 +1,110 @@
 "use client";
-import { LoaderIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+
+import "@livekit/components-styles";
 
 import {
-    Call,
-    CallingState,
-    StreamCall,
-    StreamVideo,
-    StreamVideoClient,
-} from "@stream-io/video-react-sdk";
+    LiveKitRoom,
+    RoomAudioRenderer,
+    type LocalUserChoices,
+} from "@livekit/components-react";
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import { useTRPC } from "@/trpc/client";
-
-import "@stream-io/video-react-sdk/dist/css/styles.css";
-import { CallUI } from "./call-ui";
+import { CallActive } from "./call-active";
+import { CallEnded } from "./call-ended";
+import { CallLobby } from "./call-lobby";
 
 interface Props {
     meetingId: string;
     meetingName: string;
-    userId: string;
+    /** LiveKit access token minted server-side for this participant. */
+    token: string;
+    /** Display name (used to pre-fill the lobby). */
     userName: string;
-    userImage: string;
-};
+    /** True when this viewer owns the meeting — unlocks "end for everyone". */
+    isHost: boolean;
+    /** False for anonymous guests — they cannot dispatch the agent or end the meeting. */
+    isAuthenticated: boolean;
+}
+
+// NEXT_PUBLIC_* is inlined at build time, so it's safe to read in the browser.
+const SERVER_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
 export const CallConnect = ({
     meetingId,
     meetingName,
-    userId,
+    token,
     userName,
-    userImage,
+    isHost,
+    isAuthenticated,
 }: Props) => {
     const trpc = useTRPC();
-    const { mutateAsync: generateToken } = useMutation(
-        trpc.meetings.generateToken.mutationOptions(),
+    const { mutateAsync: connectAgent } = useMutation(
+        trpc.meetings.connectAgent.mutationOptions()
+    );
+    const { mutateAsync: endMeeting } = useMutation(
+        trpc.meetings.endMeeting.mutationOptions()
     );
 
-    const [client, setClient] = useState<StreamVideoClient>();
-    useEffect(() => {
-        const _client = new StreamVideoClient({
-            apiKey: process.env.NEXT_PUBLIC_STREAM_VIDEO_API_KEY!,
-            user: {
-                id: userId,
-                name: userName,
-                image: userImage,
-            },
-            tokenProvider: generateToken,
-        });
+    const [show, setShow] = useState<"lobby" | "call" | "ended">("lobby");
+    const [choices, setChoices] = useState<LocalUserChoices>();
 
-        setClient(_client);
+    const handleJoin = async (userChoices: LocalUserChoices) => {
+        setChoices(userChoices);
+        setShow("call");
 
-        return () => {
-            _client.disconnectUser();
-            setClient(undefined);
-        };
-    }, [userId, userName, userImage, generateToken                      ]);
-
-    const [call, setCall] = useState<Call>();
-
-    useEffect(() => {
-        if (!client) return;
-
-        const _call = client.call("default", meetingId);
-        _call.camera.disable();
-        _call.microphone.disable();
-        setCall(_call);
-
-        return () => {
-            if (_call.state.callingState !== CallingState.LEFT) {
-                _call.leave();
-                _call.endCall();
-                setCall(undefined);
+        // Only signed-in users may dispatch the AI agent (connectAgent is a
+        // protected procedure, and it's idempotent so the first joiner wins).
+        if (isAuthenticated) {
+            try {
+                await connectAgent({ id: meetingId });
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "AI agent failed to join";
+                toast.error(message);
             }
-        };
-    }, [client, meetingId]);
+        }
+    };
 
-    if (!client || !call) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-radial from-sidebar-accent to-sidebar">
-                <LoaderIcon className="size-6 animate-spin text-white" />
-            </div>
-        );
+    // Host-only: tear the room down for everyone. Deleting the room disconnects
+    // all participants, which fires each client's onDisconnected -> "ended".
+    const handleEndForEveryone = async () => {
+        try {
+            await endMeeting({ id: meetingId });
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Failed to end the meeting";
+            toast.error(message);
+        }
+    };
+
+    if (show === "ended") {
+        return <CallEnded />;
+    }
+
+    if (show === "lobby" || !choices) {
+        return <CallLobby userName={userName} onJoin={handleJoin} />;
     }
 
     return (
-        <StreamVideo client={client}>
-            <StreamCall call={call}>
-                <CallUI meetingName={meetingName} />
-            </StreamCall>
-        </StreamVideo>
+        <LiveKitRoom
+            serverUrl={SERVER_URL}
+            token={token}
+            connect
+            audio={choices.audioEnabled}
+            video={choices.videoEnabled}
+            data-lk-theme="default"
+            className="h-full"
+            onDisconnected={() => setShow("ended")}
+        >
+            <CallActive
+                meetingName={meetingName}
+                isHost={isHost}
+                onEndForEveryone={handleEndForEveryone}
+            />
+            <RoomAudioRenderer />
+        </LiveKitRoom>
     );
 };
