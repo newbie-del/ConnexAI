@@ -1,7 +1,11 @@
 import {
   AccessToken,
   AgentDispatchClient,
+  EgressClient,
+  EncodedFileOutput,
+  EncodedFileType,
   RoomServiceClient,
+  S3Upload,
   WebhookReceiver,
 } from "livekit-server-sdk";
 
@@ -100,6 +104,8 @@ interface DispatchAgentOptions {
   instructions: string;
   meetingId: string;
   agentId: string;
+  /** The persona's display name (agents.name), shown as the agent's tile label. */
+  agentName: string;
 }
 
 /**
@@ -111,8 +117,54 @@ export async function dispatchMeetingAgent({
   instructions,
   meetingId,
   agentId,
+  agentName,
 }: DispatchAgentOptions) {
   return agentDispatchClient.createDispatch(roomName, CONNEXAI_AGENT_NAME, {
-    metadata: JSON.stringify({ instructions, meetingId, agentId }),
+    metadata: JSON.stringify({ instructions, meetingId, agentId, agentName }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Egress — room recording to Cloudflare R2 (S3-compatible)
+// ---------------------------------------------------------------------------
+
+export const egressClient = new EgressClient(
+  httpUrl,
+  LIVEKIT_API_KEY ?? "",
+  LIVEKIT_API_SECRET ?? ""
+);
+
+const EGRESS_S3_ACCESS_KEY = process.env.LIVEKIT_EGRESS_S3_ACCESS_KEY ?? "";
+const EGRESS_S3_SECRET = process.env.LIVEKIT_EGRESS_S3_SECRET ?? "";
+const EGRESS_S3_BUCKET = process.env.LIVEKIT_EGRESS_S3_BUCKET ?? "";
+const EGRESS_S3_ENDPOINT = process.env.LIVEKIT_EGRESS_S3_ENDPOINT ?? "";
+const EGRESS_S3_REGION = process.env.LIVEKIT_EGRESS_S3_REGION ?? "auto";
+
+/**
+ * Start a RoomCompositeEgress that records the room to an MP4 in R2.
+ * Idempotent: check for active egresses before calling.
+ */
+export async function startRoomRecording(roomName: string) {
+  if (!EGRESS_S3_ACCESS_KEY || !EGRESS_S3_BUCKET || !EGRESS_S3_ENDPOINT) {
+    console.warn("[livekit] R2 egress env vars not set — skipping recording.");
+    return null;
+  }
+
+  const output = new EncodedFileOutput({
+    fileType: EncodedFileType.MP4,
+    filepath: `recordings/${roomName}/{time}`,
+    output: {
+      case: "s3",
+      value: new S3Upload({
+        accessKey: EGRESS_S3_ACCESS_KEY,
+        secret: EGRESS_S3_SECRET,
+        bucket: EGRESS_S3_BUCKET,
+        endpoint: EGRESS_S3_ENDPOINT,
+        region: EGRESS_S3_REGION,
+        forcePathStyle: true,
+      }),
+    },
+  });
+
+  return egressClient.startRoomCompositeEgress(roomName, output);
 }

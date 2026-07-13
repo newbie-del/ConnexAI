@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, unique, index } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text('id').primaryKey(),
@@ -83,6 +83,10 @@ export const meetings = pgTable("meetings", {
     startedAt: timestamp("started_at"),
     endedAt: timestamp("ended_at"),
     transcriptUrl: text("transcript_url"),
+    // Raw JSONL transcript (one StreamTranscriptItem per line) delivered by the
+    // LiveKit agent worker. Stored inline since there's no blob store and both
+    // consumers (getTranscript, the Inngest summarizer) run in-process with `db`.
+    transcript: text("transcript"),
     recordingUrl: text("recording_url"),
     summary: text("summary"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -110,5 +114,28 @@ export const meetingParticipants = pgTable(
     joinedAt: timestamp("joined_at").notNull().defaultNow(),
   },
   (table) => [unique("meeting_participants_meeting_user_unique").on(table.meetingId, table.userId)],
+);
+
+// Author of a post-meeting "Ask AI" chat message.
+export const chatRole = pgEnum("chat_role", ["user", "assistant"]);
+
+// Persistent post-meeting "Ask AI" chat, replacing Stream Chat. One row per
+// message (user question or Gemini answer), scoped to a meeting.
+export const meetingChatMessages = pgTable(
+  "meeting_chat_messages",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    meetingId: text("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    role: chatRole("role").notNull(),
+    // Set for "user" messages (who asked); null for "assistant" (the agent) turns.
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("meeting_chat_messages_meeting_created_idx").on(table.meetingId, table.createdAt)],
 );
 

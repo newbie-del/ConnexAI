@@ -1,9 +1,9 @@
 import { db } from "@/db";
 import JSONL from "jsonl-parse-stringify";
 import { nanoid } from "nanoid";
-import { agents, meetings, meetingParticipants, user } from "@/db/schema";
+import { agents, meetings, meetingParticipants, meetingChatMessages, user } from "@/db/schema";
 import { TRPCError } from "@trpc/server";
-import { and, eq, getTableColumns, ilike, desc, count, sql, inArray, or } from "drizzle-orm";
+import { and, eq, getTableColumns, ilike, desc, asc, count, sql, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -16,11 +16,13 @@ import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE } from "@
 import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
 import { MeetingStatus, StreamTranscriptItem } from "../types";
 import { generateAvatarUri } from "@/lib/avatar";
-import { streamChat } from "@/lib/stream-chat";
+import { generateText } from "@/lib/gemini";
 import {
   createMeetingToken,
   dispatchMeetingAgent,
+  egressClient,
   roomService,
+  startRoomRecording,
 } from "@/lib/livekit";
 
 // A meeting can no longer be joined once it has ended / is being processed.
@@ -31,15 +33,6 @@ const NON_JOINABLE_STATUSES: string[] = [
 ];
 
 export const meetingsRouter = createTRPCRouter({
-    generateChatToken: protectedProcedure.mutation(async ({ ctx }) => {
-        const token = streamChat.createToken(ctx.auth.user.id);
-        await streamChat.upsertUser({
-            id: ctx.auth.user.id,
-            role: "admin",
-        });
-
-        return token;
-    }),
 
     getTranscript: protectedProcedure
         .input(z.object({ id: z.string() }))
@@ -56,19 +49,13 @@ export const meetingsRouter = createTRPCRouter({
                     });
                 }
 
-                // Owner OR any recorded (logged-in) participant may read the transcript.
                 await assertMeetingAccess(existingMeeting.userId, input.id, ctx.auth.user.id);
 
-                if (!existingMeeting.transcriptUrl) {
+                if (!existingMeeting.transcript) {
                     return [];
                 }
 
-                const transcript = await fetch(existingMeeting.transcriptUrl)
-                   .then((res) => res.text())
-                   .then((text) => JSONL.parse<StreamTranscriptItem>(text))
-                   .catch(() => {
-                    return [];
-                   });
+                const transcript = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
 
                    const speakerIds = [
                     ...new Set(transcript.map((item) => item.speaker_id)),
@@ -188,6 +175,9 @@ export const meetingsRouter = createTRPCRouter({
                 roomName: input.meetingId,
                 identity: ctx.auth.user.id,
                 name: ctx.auth.user.name,
+                // Encode role in participant metadata so EVERY client (not just the
+                // host themselves) can tag the host correctly in the roster.
+                metadata: JSON.stringify({ host: isHost }),
             });
 
             return token;
@@ -332,7 +322,20 @@ export const meetingsRouter = createTRPCRouter({
                 instructions: existingAgent.instructions,
                 meetingId: existingMeeting.id,
                 agentId: existingAgent.id,
+                agentName: existingAgent.name,
             });
+
+            // Start recording (idempotent — only if no active egress).
+            try {
+                const active = await egressClient
+                    .listEgress({ roomName: input.id, active: true })
+                    .catch(() => []);
+                if (active.length === 0) {
+                    await startRoomRecording(input.id);
+                }
+            } catch (e) {
+                console.warn("[connectAgent] Failed to start recording:", e);
+            }
 
             return { status: "ok" as const };
         }),
@@ -365,10 +368,6 @@ export const meetingsRouter = createTRPCRouter({
             // participant left first.
             await roomService.deleteRoom(input.id).catch(() => {});
 
-            // NOTE: until the Phase 4 transcription/summary pipeline lands, there's
-            // no background job to move a meeting out of "processing", so we mark it
-            // "completed" directly here. Phase 4 will reintroduce the
-            // active -> processing -> completed flow driven by the transcript.
             if (
                 existingMeeting.status === "active" ||
                 existingMeeting.status === "upcoming"
@@ -376,7 +375,7 @@ export const meetingsRouter = createTRPCRouter({
                 await db
                     .update(meetings)
                     .set({
-                        status: "completed",
+                        status: "processing",
                         endedAt: new Date(),
                         startedAt: existingMeeting.startedAt ?? new Date(),
                     })
@@ -482,6 +481,37 @@ export const meetingsRouter = createTRPCRouter({
             // Owner OR any recorded (logged-in) participant may view the meeting.
             await assertMeetingAccess(existingMeeting.userId, input.id, ctx.auth.user.id);
 
+            // Best-effort recording backfill for local dev where the egress_ended
+            // webhook can't reach localhost. If a completed egress exists but we
+            // haven't stored the recordingUrl yet, fill it in now.
+            if (
+                !existingMeeting.recordingUrl &&
+                (existingMeeting.status === "completed" || existingMeeting.status === "processing")
+            ) {
+                try {
+                    const egresses = await egressClient
+                        .listEgress({ roomName: input.id })
+                        .catch(() => []);
+                    const completed = egresses.find(
+                        (e) => e.status === 5 && e.fileResults?.[0]?.filename
+                    );
+                    if (completed) {
+                        const publicBase = process.env.RECORDING_PUBLIC_BASE_URL;
+                        const key = completed.fileResults![0].filename;
+                        if (publicBase && key) {
+                            const recordingUrl = `${publicBase.replace(/\/$/, "")}/${key}`;
+                            await db
+                                .update(meetings)
+                                .set({ recordingUrl })
+                                .where(eq(meetings.id, input.id));
+                            existingMeeting.recordingUrl = recordingUrl;
+                        }
+                    }
+                } catch {
+                    // Non-critical — the webhook will fill it in production.
+                }
+            }
+
             return existingMeeting;
         }),
 
@@ -566,6 +596,183 @@ export const meetingsRouter = createTRPCRouter({
                 items: data,
                 total: total.count,
                 totalPages,
+            };
+        }),
+
+    getChatMessages: protectedProcedure
+        .input(z.object({ meetingId: z.string() }))
+        .query(async ({ input, ctx }) => {
+            const [existingMeeting] = await db
+                .select({
+                    userId: meetings.userId,
+                    agentId: meetings.agentId,
+                })
+                .from(meetings)
+                .where(eq(meetings.id, input.meetingId));
+
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
+
+            await assertMeetingAccess(existingMeeting.userId, input.meetingId, ctx.auth.user.id);
+
+            const messages = await db
+                .select()
+                .from(meetingChatMessages)
+                .where(eq(meetingChatMessages.meetingId, input.meetingId))
+                .orderBy(asc(meetingChatMessages.createdAt));
+
+            const userIds = [...new Set(messages.filter((m) => m.userId).map((m) => m.userId!))];
+            const users = userIds.length
+                ? await db.select().from(user).where(inArray(user.id, userIds))
+                : [];
+
+            const [agent] = await db
+                .select()
+                .from(agents)
+                .where(eq(agents.id, existingMeeting.agentId));
+
+            return messages.map((m) => {
+                if (m.role === "assistant") {
+                    return {
+                        ...m,
+                        sender: {
+                            name: agent?.name ?? "AI Assistant",
+                            image: generateAvatarUri({
+                                seed: agent?.name ?? "assistant",
+                                variant: "botttsNeutral",
+                            }),
+                        },
+                    };
+                }
+                const u = users.find((u) => u.id === m.userId);
+                return {
+                    ...m,
+                    sender: {
+                        name: u?.name ?? "Unknown",
+                        image:
+                            u?.image ??
+                            generateAvatarUri({ seed: u?.name ?? "Unknown", variant: "initials" }),
+                    },
+                };
+            });
+        }),
+
+    sendChatMessage: protectedProcedure
+        .input(z.object({ meetingId: z.string(), text: z.string().trim().min(1).max(4000) }))
+        .mutation(async ({ input, ctx }) => {
+            const [existingMeeting] = await db
+                .select()
+                .from(meetings)
+                .where(eq(meetings.id, input.meetingId));
+
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
+
+            await assertMeetingAccess(existingMeeting.userId, input.meetingId, ctx.auth.user.id);
+
+            const [agent] = await db
+                .select()
+                .from(agents)
+                .where(eq(agents.id, existingMeeting.agentId));
+
+            // Insert the user message.
+            const userMsgId = nanoid();
+            await db.insert(meetingChatMessages).values({
+                id: userMsgId,
+                meetingId: input.meetingId,
+                role: "user",
+                userId: ctx.auth.user.id,
+                content: input.text,
+            });
+
+            // Build Gemini context: persona + summary + transcript (truncated) + recent chat.
+            let transcriptContext = "";
+            if (existingMeeting.transcript) {
+                const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                const formatted = parsed
+                    .map((t) => `[${t.speaker_id}]: ${t.text}`)
+                    .join("\n");
+                // Rough truncation to ~60k chars to stay within token budget.
+                transcriptContext = formatted.length > 60_000
+                    ? formatted.slice(-60_000)
+                    : formatted;
+            }
+
+            const recentHistory = await db
+                .select()
+                .from(meetingChatMessages)
+                .where(eq(meetingChatMessages.meetingId, input.meetingId))
+                .orderBy(desc(meetingChatMessages.createdAt))
+                .limit(20);
+
+            const historyMessages = recentHistory
+                .reverse()
+                .map((m) => ({
+                    role: m.role as "user" | "assistant",
+                    content: m.content,
+                }));
+
+            const system = [
+                "You are an AI assistant helping the user revisit a completed meeting.",
+                agent?.instructions
+                    ? `Follow these behavioral guidelines:\n${agent.instructions}`
+                    : "",
+                existingMeeting.summary
+                    ? `Meeting summary:\n${existingMeeting.summary}`
+                    : "",
+                transcriptContext
+                    ? `Full meeting transcript:\n${transcriptContext}`
+                    : "",
+                "Answer questions about the meeting using the transcript and summary above. Be concise and accurate.",
+            ]
+                .filter(Boolean)
+                .join("\n\n");
+
+            const reply = await generateText({
+                system,
+                messages: [
+                    ...historyMessages,
+                    { role: "user", content: input.text },
+                ],
+            });
+
+            // Insert the assistant message.
+            const assistantMsgId = nanoid();
+            await db.insert(meetingChatMessages).values({
+                id: assistantMsgId,
+                meetingId: input.meetingId,
+                role: "assistant",
+                content: reply,
+            });
+
+            const u = await db.select().from(user).where(eq(user.id, ctx.auth.user.id)).then((r) => r[0]);
+
+            return {
+                userMessage: {
+                    id: userMsgId,
+                    role: "user" as const,
+                    content: input.text,
+                    createdAt: new Date(),
+                    sender: {
+                        name: u?.name ?? "You",
+                        image: u?.image ?? generateAvatarUri({ seed: u?.name ?? "You", variant: "initials" }),
+                    },
+                },
+                assistantMessage: {
+                    id: assistantMsgId,
+                    role: "assistant" as const,
+                    content: reply,
+                    createdAt: new Date(),
+                    sender: {
+                        name: agent?.name ?? "AI Assistant",
+                        image: generateAvatarUri({
+                            seed: agent?.name ?? "assistant",
+                            variant: "botttsNeutral",
+                        }),
+                    },
+                },
             };
         }),
 
