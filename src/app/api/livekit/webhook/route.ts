@@ -66,12 +66,16 @@ export async function POST(req: NextRequest) {
         .set({ status: "processing", endedAt: new Date() })
         .where(and(eq(meetings.id, meetingId), eq(meetings.status, "active")));
     } else if (event.event === "egress_ended") {
-      // The recording URL comes from the egress result (S3/GCS/Blob location).
       const egress = event.egressInfo;
-      const recordingUrl = egress?.fileResults?.[0]?.location ?? undefined;
       const egressRoomName = egress?.roomName ?? meetingId;
 
-      if (recordingUrl && egressRoomName) {
+      // The egress file result gives us the object key inside R2. We construct
+      // the public playback URL from RECORDING_PUBLIC_BASE_URL + the key.
+      const objectKey = egress?.fileResults?.[0]?.filename;
+      const publicBase = process.env.RECORDING_PUBLIC_BASE_URL;
+
+      if (objectKey && publicBase && egressRoomName) {
+        const recordingUrl = `${publicBase.replace(/\/$/, "")}/${objectKey}`;
         await db
           .update(meetings)
           .set({ recordingUrl })

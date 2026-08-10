@@ -1,37 +1,64 @@
 # ConnexAI
 
-ConnexAI is a Next.js app for AI-assisted meetings. It uses Better Auth, Neon/Postgres with Drizzle, Stream Chat/Video, OpenAI, Inngest, and Polar.
+ConnexAI is a Next.js app for AI-assisted meetings: live video calls with an AI
+agent that joins, listens, and produces transcripts and summaries.
+
+**Stack:** Next.js 15 (App Router) · Better Auth · Neon/Postgres + Drizzle ·
+LiveKit (video + agent audio) · Google Gemini (summaries) · Stream Chat ·
+Inngest (background jobs) · Polar (billing).
+
+## Layout
+
+```
+src/                Next.js app, tRPC routers, UI modules
+  app/api/          webhooks: livekit, inngest, transcript ingest, polar
+  modules/          feature slices (call, meetings, agents, premium, home)
+  db/               Drizzle schema + client
+agent-worker/       Python LiveKit agent that joins calls and posts transcripts
+public/             static assets
+```
 
 ## Requirements
 
-- Node.js 20.18 or newer
-- npm
+- Node.js 20.18 or newer, and npm
+- Python 3.9+ (only if running the voice agent worker)
 - A Postgres database URL
-- Provider credentials for Better Auth social login, Stream, OpenAI, Polar, and Inngest
+- Accounts: LiveKit, Google AI Studio, Stream, Polar, Inngest
 
 ## Local Setup
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env    # then fill in the values
 npm run db:push
 npm run dev
 ```
 
-Set the values in `.env` before starting the app. The local app runs at `http://localhost:3000`.
+The app runs at `http://localhost:3000`.
+
+To run the AI voice agent locally, in a second terminal:
+
+```bash
+cd agent-worker
+pip install -r requirements.txt
+cp .env.example .env    # LiveKit creds + GOOGLE_API_KEY
+python agent.py dev
+```
 
 ## Environment Variables
 
-Use `.env.example` as the source of required deployment variables. In production, set:
+`.env.example` is the source of truth — every variable there is read somewhere
+in `src/`. The ones that most often break a deploy:
 
-- `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` to the deployed app URL
-- `DATABASE_URL` to your production Postgres connection string
-- `BETTER_AUTH_SECRET` to a strong random secret
-- OAuth credentials for GitHub and Google
-- Stream Chat and Stream Video keys/secrets
-- `OPENAI_API_KEY`
-- `POLAR_ACCESS_TOKEN` and `POLAR_SERVER` (`sandbox` or `production`)
-- `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`
+- `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL` — set to the deployed URL
+- `BETTER_AUTH_SECRET` — a strong random secret
+- `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`, plus
+  `NEXT_PUBLIC_LIVEKIT_URL` for the browser client
+- `GOOGLE_API_KEY` — Gemini, used for summaries
+- `CONNEXAI_INGEST_SECRET` — must match the agent worker's copy
+
+The `LIVEKIT_EGRESS_S3_*` group is optional; without it, call recording is
+skipped rather than failing the call.
 
 ## Production Build
 
@@ -41,19 +68,25 @@ npm run build
 npm run start
 ```
 
-`next.config.ts` enables standalone output, so platforms that run the Next server directly can use the generated `.next/standalone` build. Vercel can deploy this project with the default Next.js settings.
+`next.config.ts` enables standalone output, so platforms that run the Next
+server directly can use `.next/standalone`. Vercel deploys this with default
+Next.js settings.
+
+Note that the Python agent worker is a separate long-running process — it does
+not deploy with the Next.js app and needs its own host.
 
 ## Deployment Notes
 
-Before deploying, run database migrations with:
+Run migrations before deploying:
 
 ```bash
 npm run db:push
 ```
 
-Configure external webhook URLs after the app has a public URL:
+Configure webhooks once the app has a public URL:
 
-- Stream webhook: `https://your-domain.com/api/webhook`
+- LiveKit webhook: `https://your-domain.com/api/livekit/webhook`
 - Inngest endpoint: `https://your-domain.com/api/inngest`
 
-For local webhook testing, update `dev:webhook` in `package.json` with your own ngrok URL.
+For local webhook testing, update the `dev:webhook` script in `package.json`
+with your own ngrok URL.

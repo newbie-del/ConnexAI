@@ -5,7 +5,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 
 import { MeetingGetOne } from "../../types"
-import { 
+import {
     BookOpenTextIcon,
     FileTextIcon,
     SparklesIcon,
@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { formatDuration } from "@/lib/utils";
 import { Transcript } from "./transcript";
-import { ChatProvider } from "./chat-provider";
+import { MeetingChat } from "./meeting-chat";
 
 interface Props {
     data: MeetingGetOne;
@@ -72,18 +72,24 @@ export const CompleteddState =({ data}: Props) => {
                     </ScrollArea>
                 </div>
                 <TabsContent value= "chat">
-                    <ChatProvider meetingId={data.id} meetingName={data.name} />
+                    <MeetingChat meetingId={data.id} />
                 </TabsContent>
                 <TabsContent value= "transcript">
                     <Transcript meetingId={data.id} />
                 </TabsContent>
                 <TabsContent value="recording">
                     <div className="bg-white rounded-lg border px-4 py-5">
-                        <video
-                          src={data.recordingUrl!}
-                          className="w-full rounded-lg"
-                          controls
-                        />
+                        {data.recordingUrl ? (
+                            <video
+                              src={data.recordingUrl}
+                              className="w-full rounded-lg"
+                              controls
+                            />
+                        ) : (
+                            <p className="text-sm text-muted-foreground text-center py-8">
+                                No recording available for this meeting.
+                            </p>
+                        )}
                     </div>
                 </TabsContent>
                 <TabsContent value="summary">

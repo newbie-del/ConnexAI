@@ -95,6 +95,18 @@ export const CallConnect = ({
             connect
             audio={choices.audioEnabled}
             video={choices.videoEnabled}
+            // Force browser audio processing ON for every captured mic track.
+            // Without this the raw mic picks up the speaker output and echoes it
+            // back to the room — the "irritating sound" heard whenever someone
+            // talks. echoCancellation kills the feedback loop; noiseSuppression +
+            // autoGainControl clean up the rest.
+            options={{
+                audioCaptureDefaults: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            }}
             data-lk-theme="default"
             className="h-full"
             onDisconnected={() => setShow("ended")}
