@@ -15,7 +15,11 @@ export const DashboardTrial = () => {
     const trpc = useTRPC();
     const {data} = useQuery(trpc.premium.getFreeUsage.queryOptions());
 
+    // `null` means the user is on a paid plan, so there is no trial to show.
     if (!data) return null;
+
+    const agentCount = Math.min(data.agentCount, MAX_FREE_AGENTS);
+    const meetingCount = Math.min(data.meetingCount, MAX_FREE_MEETINGS);
 
     return (
         <div className="border border-border/10 rounded-lg w-full bg-white/5 flex flex-col gap-y-2">
@@ -26,15 +30,15 @@ export const DashboardTrial = () => {
                 </div>
                 <div className="flex flex-col gap-y-2">
                     <p className="text-xs">
-                        {data.agentCount}/{MAX_FREE_AGENTS} Agents
+                        {agentCount}/{MAX_FREE_AGENTS} Agents
                     </p>
-                    <Progress value={(data.agentCount / MAX_FREE_AGENTS) * 100} />
+                    <Progress value={(agentCount / MAX_FREE_AGENTS) * 100} />
                 </div>
                 <div className="flex flex-col gap-y-2">
                     <p className="text-xs">
-                        {data.meetingCount}/{MAX_FREE_MEETINGS} Meetings
+                        {meetingCount}/{MAX_FREE_MEETINGS} Meetings
                     </p>
-                    <Progress value={(data.meetingCount / MAX_FREE_MEETINGS) * 100} />
+                    <Progress value={(meetingCount / MAX_FREE_MEETINGS) * 100} />
                 </div>
             </div>
             <Button

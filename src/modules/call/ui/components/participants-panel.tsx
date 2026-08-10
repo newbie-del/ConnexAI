@@ -177,8 +177,8 @@ export function ParticipantsPanel({
                       </div>
                     </div>
 
-                    {/* Mute Button */}
-                    {participant.id !== currentUserId && (
+                    {/* Mute Button (only when a mute handler is wired) */}
+                    {onMute && participant.id !== currentUserId && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
