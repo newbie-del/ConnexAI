@@ -1,0 +1,9 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# The worker must stay up: LiveKit dispatches jobs to it over a persistent
+# connection. Restart it if it ever exits.
+restartPolicyType = "always"
+numReplicas = 1
