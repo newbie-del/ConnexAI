@@ -61,3 +61,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Railway one-time setup script — contains live secrets.
+.railway-setup.sh
+.railway/
