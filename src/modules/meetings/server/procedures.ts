@@ -704,14 +704,17 @@ export const meetingsRouter = createTRPCRouter({
             // Build Gemini context: persona + summary + transcript (truncated) + recent chat.
             let transcriptContext = "";
             if (existingMeeting.transcript) {
-                const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
-                const formatted = parsed
-                    .map((t) => `[${t.speaker_id}]: ${t.text}`)
-                    .join("\n");
-                // Rough truncation to ~60k chars to stay within token budget.
-                transcriptContext = formatted.length > 60_000
-                    ? formatted.slice(-60_000)
-                    : formatted;
+                try {
+                    const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                    const formatted = parsed
+                        .map((t) => `[${t.speaker_id}]: ${t.text}`)
+                        .join("\n");
+                    // Rough truncation to ~60k chars to stay within token budget.
+                    transcriptContext =
+                        formatted.length > 60_000 ? formatted.slice(-60_000) : formatted;
+                } catch {
+                    // Ignore malformed transcripts (chat can still operate on summary/history).
+                }
             }
 
             const recentHistory = await db
