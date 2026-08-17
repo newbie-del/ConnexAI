@@ -57,10 +57,15 @@ export async function POST(req: NextRequest) {
 
   try {
     // Persist the raw JSONL transcript; getTranscript + the summarizer read it.
-    await db
+    const updated = await db
       .update(meetings)
       .set({ transcript: JSONL.stringify(transcript) })
-      .where(eq(meetings.id, meetingId));
+      .where(eq(meetings.id, meetingId))
+      .returning({ id: meetings.id });
+
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+    }
 
     // The webhook/endMeeting normally sets `processing`, but flip it defensively
     // here too (covers "everyone left" without an explicit end).

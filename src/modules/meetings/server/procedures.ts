@@ -17,7 +17,6 @@ import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
 import { MeetingStatus, StreamTranscriptItem } from "../types";
 import { generateAvatarUri } from "@/lib/avatar";
 import { generateText } from "@/lib/gemini";
-import { streamChat } from "@/lib/stream-chat";
 import {
   createMeetingToken,
   dispatchMeetingAgent,
@@ -110,15 +109,6 @@ export async function prepareAuthenticatedCallSession({
 }
 
 export const meetingsRouter = createTRPCRouter({
-    generateChatToken: protectedProcedure.mutation(async ({ ctx }) => {
-        const token = streamChat.createToken(ctx.auth.user.id);
-        await streamChat.upsertUser({
-            id: ctx.auth.user.id,
-            role: "admin",
-        });
-
-        return token;
-    }),
 
     getTranscript: protectedProcedure
         .input(z.object({ id: z.string() }))
@@ -714,14 +704,17 @@ export const meetingsRouter = createTRPCRouter({
             // Build Gemini context: persona + summary + transcript (truncated) + recent chat.
             let transcriptContext = "";
             if (existingMeeting.transcript) {
-                const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
-                const formatted = parsed
-                    .map((t) => `[${t.speaker_id}]: ${t.text}`)
-                    .join("\n");
-                // Rough truncation to ~60k chars to stay within token budget.
-                transcriptContext = formatted.length > 60_000
-                    ? formatted.slice(-60_000)
-                    : formatted;
+                try {
+                    const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                    const formatted = parsed
+                        .map((t) => `[${t.speaker_id}]: ${t.text}`)
+                        .join("\n");
+                    // Rough truncation to ~60k chars to stay within token budget.
+                    transcriptContext =
+                        formatted.length > 60_000 ? formatted.slice(-60_000) : formatted;
+                } catch {
+                    // Ignore malformed transcripts (chat can still operate on summary/history).
+                }
             }
 
             const recentHistory = await db
@@ -756,10 +749,7 @@ export const meetingsRouter = createTRPCRouter({
 
             const reply = await generateText({
                 system,
-                messages: [
-                    ...historyMessages,
-                    { role: "user", content: input.text },
-                ],
+                messages: historyMessages,
             });
 
             // Insert the assistant message.
