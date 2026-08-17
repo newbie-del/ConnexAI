@@ -18,6 +18,7 @@ import { MeetingStatus, StreamTranscriptItem } from "../types";
 import { generateAvatarUri } from "@/lib/avatar";
 import { generateText } from "@/lib/gemini";
 import { streamChat } from "@/lib/stream-chat";
+import { EgressStatus } from "livekit-server-sdk";
 import {
   createMeetingToken,
   dispatchMeetingAgent,
@@ -141,7 +142,14 @@ export const meetingsRouter = createTRPCRouter({
                     return [];
                 }
 
-                const transcript = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                let transcript: StreamTranscriptItem[];
+                try {
+                    transcript = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                } catch {
+                    // Malformed/legacy transcript: degrade to an empty transcript
+                    // rather than failing the whole query.
+                    return [];
+                }
 
                    const speakerIds = [
                     ...new Set(transcript.map((item) => item.speaker_id)),
@@ -714,14 +722,20 @@ export const meetingsRouter = createTRPCRouter({
             // Build Gemini context: persona + summary + transcript (truncated) + recent chat.
             let transcriptContext = "";
             if (existingMeeting.transcript) {
-                const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
-                const formatted = parsed
-                    .map((t) => `[${t.speaker_id}]: ${t.text}`)
-                    .join("\n");
-                // Rough truncation to ~60k chars to stay within token budget.
-                transcriptContext = formatted.length > 60_000
-                    ? formatted.slice(-60_000)
-                    : formatted;
+                try {
+                    const parsed = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                    const formatted = parsed
+                        .map((t) => `[${t.speaker_id}]: ${t.text}`)
+                        .join("\n");
+                    // Rough truncation to ~60k chars to stay within token budget.
+                    transcriptContext = formatted.length > 60_000
+                        ? formatted.slice(-60_000)
+                        : formatted;
+                } catch {
+                    // Malformed transcript shouldn't break chat — fall back to
+                    // answering from the summary and chat history alone.
+                    transcriptContext = "";
+                }
             }
 
             const recentHistory = await db
@@ -756,10 +770,10 @@ export const meetingsRouter = createTRPCRouter({
 
             const reply = await generateText({
                 system,
-                messages: [
-                    ...historyMessages,
-                    { role: "user", content: input.text },
-                ],
+                // `recentHistory` was read *after* inserting the user message above,
+                // so (once reversed into chronological order) it already ends with
+                // this turn — appending input.text again would duplicate it.
+                messages: historyMessages,
             });
 
             // Insert the assistant message.
@@ -840,7 +854,9 @@ async function backfillRecordingUrl(meetingId: string) {
             .listEgress({ roomName: meetingId })
             .catch(() => []);
         const completed = egresses.find(
-            (e) => e.status === 5 && e.fileResults?.[0]?.filename
+            (e) =>
+                e.status === EgressStatus.EGRESS_COMPLETE &&
+                e.fileResults?.[0]?.filename
         );
         if (!completed) {
             return;

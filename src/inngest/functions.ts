@@ -61,8 +61,30 @@ export const meetingProcessing = inngest.createFunction(
     }
 
     const transcript = await step.run("parse-transcript", async () => {
-      return JSONL.parse<StreamTranscriptItem>(meeting.transcript as string);
+      try {
+        return JSONL.parse<StreamTranscriptItem>(meeting.transcript as string);
+      } catch (error) {
+        // Malformed/legacy JSONL: don't throw, or the meeting stays stuck in
+        // "processing" forever with no way to recover.
+        console.error("[meetings/processing] Unparseable transcript", {
+          meetingId,
+          error,
+        });
+        return null;
+      }
     });
+
+    // Nothing usable to summarize — finish with the fallback summary rather than
+    // leaving the meeting in "processing".
+    if (!transcript || transcript.length === 0) {
+      await step.run("save-fallback-summary", async () => {
+        await db
+          .update(meetings)
+          .set({ summary: NO_TRANSCRIPT_SUMMARY, status: "completed" })
+          .where(eq(meetings.id, meetingId));
+      });
+      return { empty: true as const };
+    }
 
     const transcriptWithSpeakers = await step.run("add-speakers", async () => {
       const speakerIds = [
