@@ -3,7 +3,7 @@ import JSONL from "jsonl-parse-stringify";
 import { nanoid } from "nanoid";
 import { agents, meetings, meetingParticipants, meetingChatMessages, user } from "@/db/schema";
 import { TRPCError } from "@trpc/server";
-import { and, eq, getTableColumns, ilike, desc, asc, count, sql, inArray, or } from "drizzle-orm";
+import { and, eq, exists, ilike, desc, asc, count, sql, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -31,6 +31,82 @@ const NON_JOINABLE_STATUSES: string[] = [
   MeetingStatus.Processing,
   MeetingStatus.Cancelled,
 ];
+
+interface AuthenticatedCallUser {
+    id: string;
+    name: string;
+}
+
+export async function prepareAuthenticatedCallSession({
+    meetingId,
+    user,
+}: {
+    meetingId: string;
+    user: AuthenticatedCallUser;
+}) {
+    const [existingMeeting] = await db
+        .select({
+            id: meetings.id,
+            name: meetings.name,
+            status: meetings.status,
+            userId: meetings.userId,
+        })
+        .from(meetings)
+        .where(eq(meetings.id, meetingId));
+
+    if (!existingMeeting) {
+        throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Meeting not found",
+        });
+    }
+
+    if (NON_JOINABLE_STATUSES.includes(existingMeeting.status)) {
+        throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "This meeting is no longer open to join",
+        });
+    }
+
+    const isHost = existingMeeting.userId === user.id;
+
+    await db
+        .insert(meetingParticipants)
+        .values({
+            meetingId,
+            userId: user.id,
+            role: isHost ? "host" : "participant",
+        })
+        .onConflictDoNothing();
+
+    if (existingMeeting.status === "upcoming") {
+        await db
+            .update(meetings)
+            .set({ status: "active", startedAt: new Date() })
+            .where(
+                and(
+                    eq(meetings.id, meetingId),
+                    eq(meetings.status, "upcoming")
+                )
+            );
+    }
+
+    const token = await createMeetingToken({
+        roomName: meetingId,
+        identity: user.id,
+        name: user.name,
+        metadata: JSON.stringify({ host: isHost }),
+    });
+
+    return {
+        meeting: {
+            ...existingMeeting,
+            status: existingMeeting.status === "upcoming" ? "active" : existingMeeting.status,
+        },
+        token,
+        isHost,
+    };
+}
 
 export const meetingsRouter = createTRPCRouter({
 
@@ -126,61 +202,15 @@ export const meetingsRouter = createTRPCRouter({
     generateToken: protectedProcedure
         .input(z.object({ meetingId: z.string() }))
         .mutation(async ({ ctx, input }) => {
-            const [existingMeeting] = await db
-                .select()
-                .from(meetings)
-                .where(eq(meetings.id, input.meetingId));
-
-            if (!existingMeeting) {
-                throw new TRPCError({
-                    code: "NOT_FOUND",
-                    message: "Meeting not found",
-                });
-            }
-
-            if (NON_JOINABLE_STATUSES.includes(existingMeeting.status)) {
-                throw new TRPCError({
-                    code: "FORBIDDEN",
-                    message: "This meeting is no longer open to join",
-                });
-            }
-
-            const isHost = existingMeeting.userId === ctx.auth.user.id;
-
-            // Record participation (idempotent via the unique meeting+user index).
-            await db
-                .insert(meetingParticipants)
-                .values({
-                    meetingId: input.meetingId,
-                    userId: ctx.auth.user.id,
-                    role: isHost ? "host" : "participant",
-                })
-                .onConflictDoNothing();
-
-            // Locally we don't rely on the LiveKit room_started webhook (needs a
-            // public URL), so flip upcoming -> active here on first join.
-            if (existingMeeting.status === "upcoming") {
-                await db
-                    .update(meetings)
-                    .set({ status: "active", startedAt: new Date() })
-                    .where(
-                        and(
-                            eq(meetings.id, input.meetingId),
-                            eq(meetings.status, "upcoming")
-                        )
-                    );
-            }
-
-            const token = await createMeetingToken({
-                roomName: input.meetingId,
-                identity: ctx.auth.user.id,
-                name: ctx.auth.user.name,
-                // Encode role in participant metadata so EVERY client (not just the
-                // host themselves) can tag the host correctly in the roster.
-                metadata: JSON.stringify({ host: isHost }),
+            const session = await prepareAuthenticatedCallSession({
+                meetingId: input.meetingId,
+                user: {
+                    id: ctx.auth.user.id,
+                    name: ctx.auth.user.name,
+                },
             });
 
-            return token;
+            return session.token;
         }),
 
     // Mint a LiveKit token for an ANONYMOUS guest (no account, no session).
@@ -325,17 +355,7 @@ export const meetingsRouter = createTRPCRouter({
                 agentName: existingAgent.name,
             });
 
-            // Start recording (idempotent — only if no active egress).
-            try {
-                const active = await egressClient
-                    .listEgress({ roomName: input.id, active: true })
-                    .catch(() => []);
-                if (active.length === 0) {
-                    await startRoomRecording(input.id);
-                }
-            } catch (e) {
-                console.warn("[connectAgent] Failed to start recording:", e);
-            }
+            void ensureRoomRecording(input.id);
 
             return { status: "ok" as const };
         }),
@@ -463,7 +483,18 @@ export const meetingsRouter = createTRPCRouter({
         .query(async ({ input, ctx }) => {
             const [existingMeeting] = await db
                 .select({
-                    ...getTableColumns(meetings),
+                    id: meetings.id,
+                    name: meetings.name,
+                    userId: meetings.userId,
+                    agentId: meetings.agentId,
+                    status: meetings.status,
+                    startedAt: meetings.startedAt,
+                    endedAt: meetings.endedAt,
+                    transcriptUrl: meetings.transcriptUrl,
+                    recordingUrl: meetings.recordingUrl,
+                    summary: meetings.summary,
+                    createdAt: meetings.createdAt,
+                    updatedAt: meetings.updatedAt,
                     agent: agents,
                     duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
                 })
@@ -482,34 +513,13 @@ export const meetingsRouter = createTRPCRouter({
             await assertMeetingAccess(existingMeeting.userId, input.id, ctx.auth.user.id);
 
             // Best-effort recording backfill for local dev where the egress_ended
-            // webhook can't reach localhost. If a completed egress exists but we
-            // haven't stored the recordingUrl yet, fill it in now.
+            // webhook can't reach localhost. Keep it off the critical path so a
+            // slow LiveKit API call does not block the meeting detail page.
             if (
                 !existingMeeting.recordingUrl &&
                 (existingMeeting.status === "completed" || existingMeeting.status === "processing")
             ) {
-                try {
-                    const egresses = await egressClient
-                        .listEgress({ roomName: input.id })
-                        .catch(() => []);
-                    const completed = egresses.find(
-                        (e) => e.status === 5 && e.fileResults?.[0]?.filename
-                    );
-                    if (completed) {
-                        const publicBase = process.env.RECORDING_PUBLIC_BASE_URL;
-                        const key = completed.fileResults![0].filename;
-                        if (publicBase && key) {
-                            const recordingUrl = `${publicBase.replace(/\/$/, "")}/${key}`;
-                            await db
-                                .update(meetings)
-                                .set({ recordingUrl })
-                                .where(eq(meetings.id, input.id));
-                            existingMeeting.recordingUrl = recordingUrl;
-                        }
-                    }
-                } catch {
-                    // Non-critical — the webhook will fill it in production.
-                }
+                void backfillRecordingUrl(input.id);
             }
 
             return existingMeeting;
@@ -541,54 +551,58 @@ export const meetingsRouter = createTRPCRouter({
             const { page, pageSize, search, status, agentId } = input;
 
             // Meetings the user owns OR was a participant in both show up in the list.
-            const participantRows = await db
-                .select({ meetingId: meetingParticipants.meetingId })
-                .from(meetingParticipants)
-                .where(eq(meetingParticipants.userId, ctx.auth.user.id));
+            const accessFilter = or(
+                eq(meetings.userId, ctx.auth.user.id),
+                exists(
+                    db
+                        .select({ x: sql`1` })
+                        .from(meetingParticipants)
+                        .where(
+                            and(
+                                eq(meetingParticipants.meetingId, meetings.id),
+                                eq(meetingParticipants.userId, ctx.auth.user.id)
+                            )
+                        )
+                )
+            );
 
-            const participantMeetingIds = participantRows.map((row) => row.meetingId);
+            const where = and(
+                accessFilter,
+                search ? ilike(meetings.name, `%${search}%`) : undefined,
+                status ? eq(meetings.status, status) : undefined,
+                agentId ? eq(meetings.agentId, agentId) : undefined,
+            );
 
-            const accessFilter =
-                participantMeetingIds.length > 0
-                    ? or(
-                          eq(meetings.userId, ctx.auth.user.id),
-                          inArray(meetings.id, participantMeetingIds)
-                      )
-                    : eq(meetings.userId, ctx.auth.user.id);
-
-            const data = await db
+            const dataQuery = db
                 .select({
-                    ...getTableColumns(meetings),
+                    id: meetings.id,
+                    name: meetings.name,
+                    userId: meetings.userId,
+                    agentId: meetings.agentId,
+                    status: meetings.status,
+                    startedAt: meetings.startedAt,
+                    endedAt: meetings.endedAt,
+                    transcriptUrl: meetings.transcriptUrl,
+                    recordingUrl: meetings.recordingUrl,
+                    createdAt: meetings.createdAt,
+                    updatedAt: meetings.updatedAt,
                     agent: agents,
                     duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
                 })
                 .from(meetings)
                 .innerJoin(agents, eq(meetings.agentId, agents.id))
-                .where(
-                    and(
-                        accessFilter,
-                        search ? ilike(meetings.name, `%${search}%`) : undefined,
-                        status ? eq(meetings.status, status) : undefined,
-                        agentId ? eq(meetings.agentId, agentId) : undefined,
-                    )
-                )
+                .where(where)
                 .orderBy(desc(meetings.createdAt), desc(meetings.id))
                 .limit(pageSize)
                 .offset((page - 1) * pageSize);
 
-            const [total] = await db
+            const totalQuery = db
                 .select({ count: count() })
                 .from(meetings)
                 .innerJoin(agents, eq(meetings.agentId, agents.id))
+                .where(where);
 
-                .where(
-                    and(
-                        accessFilter,
-                        search ? ilike(meetings.name, `%${search}%`) : undefined,
-                        status ? eq(meetings.status, status) : undefined,
-                        agentId ? eq(meetings.agentId, agentId) : undefined,
-                    )
-                );
+            const [data, [total]] = await Promise.all([dataQuery, totalQuery]);
 
             const totalPages = Math.ceil(total.count / pageSize);
 
@@ -807,5 +821,51 @@ async function assertMeetingAccess(
             code: "NOT_FOUND",
             message: "Meeting not found",
         });
+    }
+}
+
+async function backfillRecordingUrl(meetingId: string) {
+    try {
+        const egresses = await egressClient
+            .listEgress({ roomName: meetingId })
+            .catch(() => []);
+        const completed = egresses.find(
+            (e) => e.status === 5 && e.fileResults?.[0]?.filename
+        );
+        if (!completed) {
+            return;
+        }
+
+        const publicBase = process.env.RECORDING_PUBLIC_BASE_URL;
+        const key = completed.fileResults![0].filename;
+        if (!publicBase || !key) {
+            return;
+        }
+
+        const recordingUrl = `${publicBase.replace(/\/$/, "")}/${key}`;
+        await db
+            .update(meetings)
+            .set({ recordingUrl })
+            .where(
+                and(
+                    eq(meetings.id, meetingId),
+                    sql`${meetings.recordingUrl} IS NULL`
+                )
+            );
+    } catch {
+        // Non-critical: production webhooks also backfill this field.
+    }
+}
+
+async function ensureRoomRecording(roomName: string) {
+    try {
+        const active = await egressClient
+            .listEgress({ roomName, active: true })
+            .catch(() => []);
+        if (active.length === 0) {
+            await startRoomRecording(roomName);
+        }
+    } catch (e) {
+        console.warn("[connectAgent] Failed to start recording:", e);
     }
 }

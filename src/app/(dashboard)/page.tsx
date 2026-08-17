@@ -1,22 +1,17 @@
 import { headers } from "next/headers";
 
-import { redirect } from "next/navigation"; 
-
 import { auth } from "@/lib/auth";
 
 import { HomeView } from "@/modules/home/ui/views/home-view";
 
-
+// Public: signed-out visitors see the same page, with sign in / sign up in the
+// navbar and auth-bound calls to action.
 const Page = async () => {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-    if(!session) {
-      redirect("/sign-in");
-    }           
+  return <HomeView isAuthenticated={!!session} />;
+};
 
-      return <HomeView />
-  };
-
-      export default Page;
+export default Page;

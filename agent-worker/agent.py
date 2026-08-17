@@ -48,7 +48,9 @@ if os.getenv("FORCE_IPV4", "1") == "1":
     socket.getaddrinfo = _ipv4_only_getaddrinfo
 # --------------------------------------------------------------------------
 
+from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents.voice import room_io
 from livekit.plugins import google
 from google.genai import types
 
@@ -72,6 +74,7 @@ GEMINI_LIVE_MODEL = os.getenv(
     "GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025"
 )
 GEMINI_VOICE = os.getenv("GEMINI_VOICE", "Puck")
+GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "180"))
 # Native-audio Gemini otherwise auto-detects a language from the first audio it
 # hears and sometimes guesses wrong (e.g. greeting in Telugu). Pin it.
 GEMINI_LANGUAGE = os.getenv("GEMINI_LANGUAGE", "en-US")
@@ -91,9 +94,26 @@ CONNEXAI_INGEST_SECRET = os.getenv("CONNEXAI_INGEST_SECRET")
 # stays responsive. Kept short so it never overrides the meeting's own persona.
 LANGUAGE_DIRECTIVE = (
     "Always speak and respond in English unless the participant explicitly asks you "
-    "to use another language. Keep replies short and reply promptly after the person "
-    "finishes speaking."
+    "to use another language. Keep replies short, normally one or two sentences, "
+    "and reply promptly after the person finishes speaking."
 )
+
+
+def _meeting_directive(agent_name: str | None) -> str:
+    """Gives the model its identity and meeting context.
+
+    Deliberately contains NO instruction to be silent. Gemini Live must emit a turn
+    once the server detects end-of-speech, so telling it to "stay silent" / "do not
+    make a sound" is a contradiction it resolves by literally saying the word
+    "silence". Any decision about when NOT to speak belongs in code, not here.
+    """
+    name = (agent_name or "").strip()
+    if not name:
+        return "You are taking part in a live meeting with one or more participants."
+    return (
+        f"You are {name}, taking part in a live meeting with one or more "
+        "participants. Answer naturally whenever someone speaks to you."
+    )
 
 
 def _parse_job_metadata(ctx: JobContext) -> dict:
@@ -116,6 +136,7 @@ async def entrypoint(ctx: JobContext) -> None:
     meeting_id = meta.get("meetingId", "<spike>")
     agent_id = meta.get("agentId")
     agent_name = meta.get("agentName")
+    meeting_directive = _meeting_directive(agent_name)
     logger.info("Agent joining room=%s meetingId=%s", ctx.room.name, meeting_id)
 
     # --- Transcript capture ------------------------------------------------
@@ -126,9 +147,39 @@ async def entrypoint(ctx: JobContext) -> None:
     # id arrives in job metadata.
     transcript_items: list[dict] = []
     session_start = time.monotonic()
+    active_speaker_identity: str | None = None
+
+    # Set when the user's speech is finalized, so agent_state_changed can report a
+    # real "user stopped talking -> agent started speaking" reply latency.
+    last_user_final_at: float | None = None
 
     def _elapsed_ms() -> int:
         return int((time.monotonic() - session_start) * 1000)
+
+    def _is_human_participant(participant: rtc.Participant) -> bool:
+        # LiveKit participant kind 4 is AGENT; ignore the agent's own activity.
+        return int(participant.kind) != 4
+
+    def _retarget_to_participant(identity: str) -> None:
+        nonlocal active_speaker_identity
+        if active_speaker_identity == identity:
+            return
+
+        active_speaker_identity = identity
+        try:
+            session.room_io.set_participant(identity)
+            logger.info("Agent audio input retargeted to participant=%s", identity)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not retarget agent audio to %s: %s", identity, exc)
+
+    def _on_active_speakers_changed(speakers: list[rtc.Participant]) -> None:
+        for speaker in speakers:
+            if speaker.identity == ctx.room.local_participant.identity:
+                continue
+            if not _is_human_participant(speaker):
+                continue
+            _retarget_to_participant(speaker.identity)
+            return
 
     # Show the persona's real name in the roster/tile (e.g. "agent-mentor") instead
     # of the random LiveKit identity ("agent-AJ_tb84gomqNg3Y"). Clients render
@@ -145,6 +196,7 @@ async def entrypoint(ctx: JobContext) -> None:
             voice=GEMINI_VOICE,
             language=GEMINI_LANGUAGE,
             temperature=0.8,
+            max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             # THE latency lever. Native-audio Gemini models run a hidden "thinking"
             # pass before they speak, which adds several seconds to every reply —
             # this, not VAD, was why the agent still felt slow after the endpointing
@@ -162,7 +214,7 @@ async def entrypoint(ctx: JobContext) -> None:
                     start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                     prefix_padding_ms=20,
-                    silence_duration_ms=500,
+                    silence_duration_ms=300,
                 ),
             ),
         ),
@@ -178,12 +230,17 @@ async def entrypoint(ctx: JobContext) -> None:
     # agent reply, the model/session faulted — check the error line.
     @session.on("user_input_transcribed")
     def _on_user_transcript(ev) -> None:
+        nonlocal last_user_final_at
         if not ev.is_final:
             return
-        logger.info("user said: %s", ev.transcript)
+
+        last_user_final_at = time.monotonic()
+
+        speaker_id = getattr(ev, "speaker_id", None) or active_speaker_identity or "unknown"
+        logger.info("user said: %s speaker=%s", ev.transcript, speaker_id)
+
         # speaker_id is the participant identity (= user.id for logged-in users;
         # a guest:<id> for anonymous joiners, which resolves to "Unknown").
-        speaker_id = getattr(ev, "speaker_id", None) or "unknown"
         transcript_items.append(
             {
                 "speaker_id": speaker_id,
@@ -216,11 +273,29 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("agent_state_changed")
     def _on_agent_state(ev) -> None:
-        logger.info("agent state: %s -> %s", ev.old_state, ev.new_state)
+        # Reply latency = user stopped talking -> agent starts speaking. This is the
+        # number to watch when the agent "feels slow"; it separates endpointing delay
+        # from model delay.
+        if ev.new_state == "speaking" and last_user_final_at is not None:
+            logger.info(
+                "agent state: %s -> %s (reply latency %.2fs)",
+                ev.old_state,
+                ev.new_state,
+                time.monotonic() - last_user_final_at,
+            )
+        else:
+            logger.info("agent state: %s -> %s", ev.old_state, ev.new_state)
+
+    @session.on("metrics_collected")
+    def _on_metrics(ev) -> None:
+        metrics = getattr(ev, "metrics", ev)
+        logger.info("agent metrics: %s", metrics)
 
     @session.on("error")
     def _on_error(ev) -> None:
         logger.error("session error: %s", getattr(ev, "error", ev))
+
+    ctx.room.on("active_speakers_changed", _on_active_speakers_changed)
 
     # Deliver the transcript to Next.js when the agent disconnects (room deleted /
     # everyone left). This triggers the summary + status transition to completed.
@@ -258,8 +333,14 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(_deliver_transcript)
 
     await session.start(
-        agent=Agent(instructions=f"{LANGUAGE_DIRECTIVE}\n\n{instructions}"),
+        agent=Agent(
+            instructions=f"{LANGUAGE_DIRECTIVE}\n\n{meeting_directive}\n\n{instructions}"
+        ),
         room=ctx.room,
+        room_options=room_io.RoomOptions(
+            close_on_disconnect=False,
+            text_input=False,
+        ),
     )
 
     # Speak first so the user hears the agent has joined. Force English here so the

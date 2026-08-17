@@ -34,35 +34,41 @@ export const premiumRouter = createTRPCRouter({
 
     return products.result.items;
   }),
-    getFreeUsage: protectedProcedure.query(async ({ ctx }) => {
+  getFreeUsage: protectedProcedure.query(async ({ ctx }) => {
         const customer = await polarClient.customers.getStateExternal({
-            externalId: ctx.auth.user.id,
+          externalId: ctx.auth.user.id,
         });
 
         const subscription = customer.activeSubscriptions[0];
 
+        // Premium customers are not on the free trial, so there is no usage to
+        // report. Returning null lets the sidebar widget hide itself.
         if (subscription) {
-            return null;
+          return null;
         }
 
-        const [userMeetings] = await db
+        const meetingsQuery = db
           .select({
             count: count(meetings.id),
           })
           .from (meetings)
           .where(eq(meetings.userId, ctx.auth.user.id));
 
-           const [userAgents] = await db
+        const agentsQuery = db
           .select({
             count: count(agents.id),
           })
           .from (agents)
           .where(eq(agents.userId, ctx.auth.user.id));
 
-          return {
+        const [[userMeetings], [userAgents]] = await Promise.all([
+          meetingsQuery,
+          agentsQuery,
+        ]);
+
+        return {
             meetingCount: userMeetings.count,
             agentCount: userAgents.count,
-          };
-
+        };
     })
 });
