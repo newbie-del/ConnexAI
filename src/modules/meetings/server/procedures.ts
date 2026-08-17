@@ -749,10 +749,7 @@ export const meetingsRouter = createTRPCRouter({
 
             const reply = await generateText({
                 system,
-                messages: [
-                    ...historyMessages,
-                    { role: "user", content: input.text },
-                ],
+                messages: historyMessages,
             });
 
             // Insert the assistant message.
