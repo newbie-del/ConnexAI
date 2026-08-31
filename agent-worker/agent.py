@@ -68,10 +68,10 @@ logging.basicConfig(level=logging.INFO)
 # "...-native-audio-latest" alias is NOT one of them: it connects and delivers the
 # opening greeting, but its live turn-detection stops responding after the first
 # reply (the "greets then goes silent" bug). Pin the documented preview instead:
-#   gemini-2.5-flash-native-audio-preview-12-2025   (default, recommended)
-#   gemini-3.1-flash-live-preview
+#   gemini-3.1-flash-live-preview                    (default, recommended)
+#   gemini-2.5-flash-native-audio-preview-12-2025
 GEMINI_LIVE_MODEL = os.getenv(
-    "GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025"
+    "GEMINI_LIVE_MODEL", "gemini-3.1-flash-live-preview"
 )
 GEMINI_VOICE = os.getenv("GEMINI_VOICE", "Puck")
 GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "180"))
