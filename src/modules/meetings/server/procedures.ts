@@ -131,7 +131,12 @@ export const meetingsRouter = createTRPCRouter({
                     return [];
                 }
 
-                const transcript = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                let transcript: StreamTranscriptItem[];
+                try {
+                    transcript = JSONL.parse<StreamTranscriptItem>(existingMeeting.transcript);
+                } catch {
+                    return [];
+                }
 
                    const speakerIds = [
                     ...new Set(transcript.map((item) => item.speaker_id)),
@@ -825,12 +830,13 @@ async function assertMeetingAccess(
 }
 
 async function backfillRecordingUrl(meetingId: string) {
+    const EGRESS_STATUS_COMPLETE = 5;
     try {
         const egresses = await egressClient
             .listEgress({ roomName: meetingId })
             .catch(() => []);
         const completed = egresses.find(
-            (e) => e.status === 5 && e.fileResults?.[0]?.filename
+            (e) => e.status === EGRESS_STATUS_COMPLETE && e.fileResults?.[0]?.filename
         );
         if (!completed) {
             return;
