@@ -2,8 +2,7 @@
 
 import { useDataChannel } from "@livekit/components-react";
 import { SmilePlusIcon } from "lucide-react";
-import { useCallback, useState } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -30,16 +29,31 @@ let _seq = 0;
 export const CallReactions = () => {
     const [open, setOpen] = useState(false);
     const [floats, setFloats] = useState<Floating[]>([]);
+    const timeoutIds = useRef<Set<number>>(new Set());
 
     const spawn = useCallback((emoji: string) => {
         const id = `${Date.now()}-${_seq++}`;
         const left = 8 + Math.random() * 84;
         setFloats((prev) => [...prev, { id, emoji, left }]);
         // Remove after the float animation finishes so the DOM stays small.
-        window.setTimeout(
-            () => setFloats((prev) => prev.filter((f) => f.id !== id)),
+        const timeoutId = window.setTimeout(
+            () => {
+                timeoutIds.current.delete(timeoutId);
+                setFloats((prev) => prev.filter((f) => f.id !== id));
+            },
             3800
         );
+        timeoutIds.current.add(timeoutId);
+    }, []);
+
+    useEffect(() => {
+        const activeTimeoutIds = timeoutIds.current;
+        return () => {
+            for (const timeoutId of activeTimeoutIds) {
+                window.clearTimeout(timeoutId);
+            }
+            activeTimeoutIds.clear();
+        };
     }, []);
 
     const { send } = useDataChannel(REACTIONS_TOPIC, (msg) => {

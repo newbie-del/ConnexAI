@@ -61,8 +61,22 @@ export const meetingProcessing = inngest.createFunction(
     }
 
     const transcript = await step.run("parse-transcript", async () => {
-      return JSONL.parse<StreamTranscriptItem>(meeting.transcript as string);
+      try {
+        return JSONL.parse<StreamTranscriptItem>(meeting.transcript as string);
+      } catch {
+        return null;
+      }
     });
+
+    if (!transcript) {
+      await step.run("save-parse-fallback-summary", async () => {
+        await db
+          .update(meetings)
+          .set({ summary: NO_TRANSCRIPT_SUMMARY, status: "completed" })
+          .where(eq(meetings.id, meetingId));
+      });
+      return { parseError: true as const };
+    }
 
     const transcriptWithSpeakers = await step.run("add-speakers", async () => {
       const speakerIds = [

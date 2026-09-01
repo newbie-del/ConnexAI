@@ -101,7 +101,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip
 
 type ChartTooltipContentProps =
   RechartsPrimitive.TooltipContentProps<
-    number | string | Array<number | string>,
+    RechartsPrimitive.TooltipValueType,
     number | string
   > &
     React.ComponentProps<"div"> & {
@@ -182,7 +182,7 @@ function ChartTooltipContent({
 
           return (
             <div
-              key={item.dataKey ?? index}
+              key={typeof item.dataKey === "function" ? index : item.dataKey ?? index}
               className={cn(
                 "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
                 indicator === "dot" && "items-center"
@@ -281,7 +281,7 @@ function ChartLegendContent({
 
         return (
           <div
-            key={item.value ?? index}
+            key={typeof item.value === "function" ? index : item.value ?? index}
             className={cn(
               "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
             )}
